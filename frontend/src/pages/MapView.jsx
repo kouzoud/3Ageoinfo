@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import { Filter, AlertCircle } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
@@ -143,7 +143,7 @@ if (typeof document !== 'undefined') {
   styleElement.textContent = markerStyles;
   document.head.appendChild(styleElement);
 }
-import { incidentsAPI, secteursAPI } from '../services/api';
+import { incidentsAPI, secteursAPI, provincesAPI } from '../services/api';
 import { PROVINCES_MAP, STATUTS_INCIDENTS, getStatut, getProvinceNom } from '../data/constants';
 
 // Création d'icônes personnalisées pour les incidents
@@ -289,7 +289,38 @@ const MapView = () => {
   const [secteurs, setSecteurs] = useState([]);
   const [targetIncident, setTargetIncident] = useState(null);
   const [legendExpanded, setLegendExpanded] = useState(false);
+  const [provincesGeoJSON, setProvincesGeoJSON] = useState(null);
+  const [selectedBaseLayer, setSelectedBaseLayer] = useState('osm');
   const markerRefs = useRef({});
+
+  // Définition des fonds de carte disponibles
+  const baseLayers = {
+    osm: {
+      name: 'OpenStreetMap',
+      url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    },
+    satellite: {
+      name: 'Satellite',
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      attribution: '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    },
+    dark: {
+      name: 'Dark',
+      url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    },
+    terrain: {
+      name: 'Terrain',
+      url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+      attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
+    },
+    light: {
+      name: 'Light',
+      url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    }
+  };
 
   // Lire les paramètres URL pour zoomer sur un incident spécifique
   useEffect(() => {
@@ -362,6 +393,19 @@ const MapView = () => {
         const secteursData = await secteursAPI.getAll();
         console.log('Secteurs récupérés du backend:', secteursData);
         setSecteurs(secteursData);
+
+        // Charger les provinces au format GeoJSON
+        try {
+          const provincesData = await provincesAPI.getGeoJSON();
+          console.log('Provinces GeoJSON récupérées:', provincesData);
+
+          // Parser le JSON si c'est une string
+          const geojson = typeof provincesData === 'string' ? JSON.parse(provincesData) : provincesData;
+          setProvincesGeoJSON(geojson);
+        } catch (provError) {
+          console.warn('Impossible de charger les provinces:', provError);
+          // Non bloquant, continuer sans les provinces
+        }
       } catch (err) {
         console.error('Erreur de récupération des données:', err);
         setError('Impossible de charger les données. Vérifiez que le backend est démarré.');
@@ -791,15 +835,119 @@ const MapView = () => {
             `}</style>
           </div>
 
+          {/* Sélecteur de fond de carte - En haut à droite */}
+          <div style={{
+            position: 'absolute',
+            top: '15px',
+            right: '15px',
+            zIndex: 1000,
+            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+            borderRadius: '12px',
+            padding: '12px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4), 0 0 20px rgba(59, 130, 246, 0.15)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(96, 165, 250, 0.2)',
+            minWidth: '180px'
+          }}>
+            <div style={{
+              fontSize: '11px',
+              fontWeight: '600',
+              marginBottom: '10px',
+              color: 'rgba(226, 232, 240, 0.7)',
+              letterSpacing: '0.5px',
+              textAlign: 'center'
+            }}>FOND DE CARTE</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {Object.entries(baseLayers).map(([key, layer]) => (
+                <button
+                  key={key}
+                  onClick={() => setSelectedBaseLayer(key)}
+                  style={{
+                    padding: '8px 12px',
+                    background: selectedBaseLayer === key
+                      ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(96, 165, 250, 0.2) 100%)'
+                      : 'rgba(51, 65, 85, 0.4)',
+                    border: selectedBaseLayer === key
+                      ? '1px solid rgba(96, 165, 250, 0.6)'
+                      : '1px solid rgba(96, 165, 250, 0.2)',
+                    borderRadius: '6px',
+                    color: selectedBaseLayer === key ? '#60a5fa' : 'rgba(226, 232, 240, 0.8)',
+                    fontSize: '12px',
+                    fontWeight: selectedBaseLayer === key ? '600' : '500',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    textAlign: 'center'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (selectedBaseLayer !== key) {
+                      e.currentTarget.style.background = 'rgba(51, 65, 85, 0.6)';
+                      e.currentTarget.style.borderColor = 'rgba(96, 165, 250, 0.4)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (selectedBaseLayer !== key) {
+                      e.currentTarget.style.background = 'rgba(51, 65, 85, 0.4)';
+                      e.currentTarget.style.borderColor = 'rgba(96, 165, 250, 0.2)';
+                    }
+                  }}
+                >
+                  {layer.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <MapContainer
             center={centerPosition}
             zoom={6}
             style={{ height: '100%', width: '100%' }}
           >
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              key={selectedBaseLayer}
+              attribution={baseLayers[selectedBaseLayer].attribution}
+              url={baseLayers[selectedBaseLayer].url}
             />
+
+            {/* Affichage des frontières de provinces */}
+            {provincesGeoJSON && (
+              <GeoJSON
+                data={provincesGeoJSON}
+                style={{
+                  fillColor: '#3b82f6',
+                  fillOpacity: 0.1,
+                  color: '#3b82f6',
+                  weight: 2,
+                  opacity: 0.6
+                }}
+                onEachFeature={(feature, layer) => {
+                  // Ajouter un tooltip avec le nom de la province
+                  if (feature.properties && feature.properties.nom) {
+                    layer.bindTooltip(feature.properties.nom, {
+                      permanent: false,
+                      direction: 'center',
+                      className: 'province-tooltip'
+                    });
+                  }
+
+                  // Effet de survol
+                  layer.on({
+                    mouseover: (e) => {
+                      e.target.setStyle({
+                        fillOpacity: 0.3,
+                        weight: 3
+                      });
+                    },
+                    mouseout: (e) => {
+                      e.target.setStyle({
+                        fillOpacity: 0.1,
+                        weight: 2
+                      });
+                    }
+                  });
+                }}
+              />
+            )}
+
             {!targetIncident && <MapUpdater incidents={filteredIncidents} />}
             <IncidentFocus targetIncident={targetIncident} markerRefs={markerRefs} />
 

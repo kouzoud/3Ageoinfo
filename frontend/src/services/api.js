@@ -262,6 +262,20 @@ export const secteursAPI = {
 };
 
 /**
+ * Service pour la gestion des provinces
+ */
+export const provincesAPI = {
+  /**
+   * Récupère toutes les provinces au format GeoJSON pour affichage sur carte
+   * @returns {Promise<Object>} GeoJSON FeatureCollection des provinces
+   */
+  getGeoJSON: () => apiClient.fetchRequest({
+    method: 'GET',
+    url: '/provinces/geojson'
+  })
+};
+
+/**
  * Service pour les endpoints publics (sans authentification)
  * Utilisé par la PWA pour les citoyens anonymes
  */
