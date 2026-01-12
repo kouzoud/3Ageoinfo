@@ -1,51 +1,37 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserPlus, RefreshCw, Sparkles } from 'lucide-react';
-import NewUserWelcome from '../components/NewUserWelcome';
-import RecoverUuidModal from '../components/RecoverUuidModal';
+import { Mail, ArrowRight, Sparkles } from 'lucide-react';
+import { showToast } from '../components/Toast';
 
 /**
- * Page de bienvenue - Affichée uniquement à la première installation sur MOBILE/PWA
- * Sur desktop web, redirige automatiquement vers l'accueil
- * Permet de choisir entre "Nouveau utilisateur" ou "Utilisateur existant"
+ * Page de bienvenue avec récupération par email
+ * Permet au citoyen de :
+ * 1. Entrer son email pour récupérer ses incidents
+ * 2. Skip pour mode anonyme (UUID)
  */
 const Welcome = () => {
     const navigate = useNavigate();
-    const [showNewUserModal, setShowNewUserModal] = useState(false);
-    const [showRecoverModal, setShowRecoverModal] = useState(false);
-    const [generatedUuid, setGeneratedUuid] = useState('');
+    const [email, setEmail] = useState('');
+    const [isValidEmail, setIsValidEmail] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-    // Vérifier si on est sur desktop web et rediriger
-    useEffect(() => {
-        const isPWA = window.matchMedia('(display-mode: standalone)').matches ||
-            window.navigator.standalone === true;
+    // Validation email
+    const validateEmail = (email) => {
+        const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return regex.test(email);
+    };
 
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-            window.innerWidth <= 768;
+    const handleEmailChange = (e) => {
+        const value = e.target.value;
+        setEmail(value);
+        setIsValidEmail(validateEmail(value));
+    };
 
-        // Si on est sur desktop web (pas PWA et pas mobile), rediriger vers l'accueil
-        if (!isPWA && !isMobile) {
-            console.log('🖥️ Desktop web détecté - Redirection vers l\'accueil');
-
-            // Générer automatiquement un UUID pour les utilisateurs desktop
-            const existingUuid = localStorage.getItem('citizen_device_id');
-            if (!existingUuid) {
-                const uuid = generateUUID();
-                localStorage.setItem('citizen_device_id', uuid);
-                console.log('📱 UUID généré automatiquement pour desktop:', uuid);
-            }
-
-            localStorage.setItem('welcome_shown', 'true');
-            navigate('/', { replace: true });
-        }
-    }, [navigate]);
-
-    // Générer un UUID v4 pour un nouveau utilisateur
+    // Générer UUID v4
     const generateUUID = () => {
         if (typeof crypto !== 'undefined' && crypto.randomUUID) {
             return crypto.randomUUID();
         }
-        // Fallback
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
             const r = Math.random() * 16 | 0;
             const v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -53,231 +39,291 @@ const Welcome = () => {
         });
     };
 
-    // Gérer le choix "Nouveau utilisateur"
-    const handleNewUser = () => {
+    // Récupérer avec email
+    const handleRecoverWithEmail = async () => {
+        if (!isValidEmail) return;
+
+        setLoading(true);
+        try {
+            // Récupérer les incidents de cet email
+            const response = await fetch(`http://localhost:8085/api/incidents/by-email/${encodeURIComponent(email)}`);
+
+            if (!response.ok) {
+                throw new Error('Erreur serveur');
+            }
+
+            const incidents = await response.json();
+            const count = incidents.length;
+
+            // Générer un UUID pour éviter que useFirstTimeUser force le retour à Welcome
+            const uuid = generateUUID();
+
+            // Sauvegarder l'email ET le UUID dans localStorage
+            localStorage.setItem('citizenEmail', email);
+            localStorage.setItem('citizen_device_id', uuid);
+            localStorage.setItem('welcome_shown', 'true');
+
+            // Message selon le cas
+            if (count > 0) {
+                // Email existant avec incidents
+                showToast(
+                    `Bienvenue ! ${count} incident${count > 1 ? 's' : ''} récupéré${count > 1 ? 's' : ''} avec succès`,
+                    'success',
+                    5000
+                );
+            } else {
+                // Email nouveau (pas d'incidents)
+                showToast(
+                    `Email enregistré ! Vos futurs incidents seront liés à ${email}`,
+                    'success',
+                    5000
+                );
+            }
+
+            // Rediriger vers la page d'accueil
+            setTimeout(() => {
+                navigate('/', { replace: true });
+            }, 100);
+        } catch (error) {
+            console.error('Erreur récupération:', error);
+            showToast(
+                'Erreur de connexion au serveur. Veuillez réessayer.',
+                'error',
+                4000
+            );
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Skip → Mode anonyme
+    const handleSkip = () => {
         const uuid = generateUUID();
         localStorage.setItem('citizen_device_id', uuid);
         localStorage.setItem('welcome_shown', 'true');
-        setGeneratedUuid(uuid);
-        setShowNewUserModal(true);
-    };
 
-    // Gérer le choix "Utilisateur existant"
-    const handleExistingUser = () => {
-        setShowRecoverModal(true);
-    };
+        console.log('🔑 Mode anonyme - UUID généré:', uuid);
 
-    // Callback après récupération réussie
-    const handleRecoverSuccess = (uuid) => {
-        localStorage.setItem('welcome_shown', 'true');
-        setShowRecoverModal(false);
-        navigate('/mes-incidents');
-    };
-
-    // Continuer vers l'app après avoir vu l'UUID
-    const handleContinue = () => {
-        setShowNewUserModal(false);
-        navigate('/');
+        navigate('/', { replace: true });
     };
 
     return (
-        <>
+        <div style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'linear-gradient(135deg, rgba(15, 23, 42, 1) 0%, rgba(30, 41, 59, 1) 50%, rgba(51, 65, 85, 1) 100%)',
+            padding: '2rem',
+            position: 'relative',
+            overflow: 'hidden'
+        }}>
+            {/* Fond animé */}
             <div style={{
-                minHeight: '100vh',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'linear-gradient(135deg, rgba(15, 23, 42, 1) 0%, rgba(30, 41, 59, 1) 50%, rgba(51, 65, 85, 1) 100%)',
-                padding: '2rem',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'radial-gradient(circle at 30% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 50%), radial-gradient(circle at 70% 50%, rgba(96, 165, 250, 0.1) 0%, transparent 50%)',
+                animation: 'pulse 8s ease-in-out infinite',
+                pointerEvents: 'none'
+            }} />
+
+            {/* Contenu principal */}
+            <div style={{
+                maxWidth: '500px',
+                width: '100%',
                 position: 'relative',
-                overflow: 'hidden'
+                zIndex: 1
             }}>
-                {/* Fond animé avec particules */}
-                <div style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: 'radial-gradient(circle at 30% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 50%), radial-gradient(circle at 70% 50%, rgba(96, 165, 250, 0.1) 0%, transparent 50%)',
-                    animation: 'pulse 8s ease-in-out infinite',
-                    pointerEvents: 'none'
-                }} />
-
-                {/* Contenu principal */}
-                <div style={{
-                    maxWidth: '500px',
-                    width: '100%',
-                    position: 'relative',
-                    zIndex: 1
-                }}>
-                    {/* En-tête */}
+                {/* En-tête */}
+                <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
                     <div style={{
-                        textAlign: 'center',
-                        marginBottom: '3rem'
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '80px',
+                        height: '80px',
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                        marginBottom: '1.5rem',
+                        boxShadow: '0 8px 32px rgba(59, 130, 246, 0.4)',
+                        animation: 'float 3s ease-in-out infinite'
                     }}>
-                        <div style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '80px',
-                            height: '80px',
-                            borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                            marginBottom: '1.5rem',
-                            boxShadow: '0 8px 32px rgba(59, 130, 246, 0.4)',
-                            animation: 'float 3s ease-in-out infinite'
-                        }}>
-                            <Sparkles size={40} style={{ color: 'white' }} />
-                        </div>
-                        <h1 style={{
-                            fontSize: '2rem',
-                            fontWeight: '700',
-                            color: 'rgba(255, 255, 255, 0.95)',
-                            marginBottom: '1rem',
-                            textShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
-                        }}>
-                            Bienvenue sur CityAlert
-                        </h1>
-                        <p style={{
-                            fontSize: '1.125rem',
-                            color: 'rgba(226, 232, 240, 0.8)',
-                            lineHeight: '1.6'
-                        }}>
-                            Signalez et suivez les incidents de votre ville en toute simplicité
-                        </p>
+                        <Sparkles size={40} style={{ color: 'white' }} />
                     </div>
-
-                    {/* Card principale */}
-                    <div style={{
-                        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(51, 65, 85, 0.8) 100%)',
-                        border: '1px solid rgba(96, 165, 250, 0.3)',
-                        borderRadius: '16px',
-                        padding: '2rem',
-                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), 0 0 1px rgba(255, 255, 255, 0.1)',
-                        backdropFilter: 'blur(10px)'
+                    <h1 style={{
+                        fontSize: '2rem',
+                        fontWeight: '700',
+                        color: 'rgba(255, 255, 255, 0.95)',
+                        marginBottom: '1rem',
+                        textShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
                     }}>
-                        <h2 style={{
-                            fontSize: '1.25rem',
-                            fontWeight: '600',
-                            color: 'rgba(255, 255, 255, 0.95)',
-                            marginBottom: '1.5rem',
-                            textAlign: 'center'
-                        }}>
-                            Comment souhaitez-vous continuer ?
-                        </h2>
+                        Bienvenue sur CityAlert
+                    </h1>
+                    <p style={{
+                        fontSize: '1.125rem',
+                        color: 'rgba(226, 232, 240, 0.8)',
+                        lineHeight: '1.6'
+                    }}>
+                        Signalez et suivez les incidents de votre ville en toute simplicité
+                    </p>
+                </div>
 
-                        {/* Bouton Nouveau utilisateur */}
-                        <button
-                            onClick={handleNewUser}
-                            style={{
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '1rem',
-                                padding: '1.25rem 1.5rem',
-                                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                                border: 'none',
-                                borderRadius: '12px',
-                                fontSize: '1.0625rem',
-                                fontWeight: '600',
-                                color: 'white',
-                                cursor: 'pointer',
-                                marginBottom: '1rem',
-                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                boxShadow: '0 4px 16px rgba(16, 185, 129, 0.4)'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
-                                e.currentTarget.style.boxShadow = '0 8px 24px rgba(16, 185, 129, 0.6)';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                                e.currentTarget.style.boxShadow = '0 4px 16px rgba(16, 185, 129, 0.4)';
-                            }}
-                        >
-                            <UserPlus size={24} />
-                            <div style={{ flex: 1, textAlign: 'left' }}>
-                                <div style={{ fontSize: '1.0625rem', fontWeight: '700' }}>
-                                    🆕 Nouveau utilisateur
-                                </div>
-                                <div style={{ fontSize: '0.875rem', opacity: 0.9, fontWeight: '400' }}>
-                                    Créer un nouvel identifiant
-                                </div>
-                            </div>
-                        </button>
+                {/* Card principale */}
+                <div style={{
+                    background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(51, 65, 85, 0.8) 100%)',
+                    border: '1px solid rgba(96, 165, 250, 0.3)',
+                    borderRadius: '16px',
+                    padding: '2rem',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), 0 0 1px rgba(255, 255, 255, 0.1)',
+                    backdropFilter: 'blur(10px)'
+                }}>
+                    <h2 style={{
+                        fontSize: '1.25rem',
+                        fontWeight: '600',
+                        color: 'rgba(255, 255, 255, 0.95)',
+                        marginBottom: '1.5rem',
+                        textAlign: 'center'
+                    }}>
+                        Comment souhaitez-vous continuer ?
+                    </h2>
 
-                        {/* Bouton Utilisateur existant */}
-                        <button
-                            onClick={handleExistingUser}
-                            style={{
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '1rem',
-                                padding: '1.25rem 1.5rem',
-                                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                                border: 'none',
-                                borderRadius: '12px',
-                                fontSize: '1.0625rem',
-                                fontWeight: '600',
-                                color: 'white',
-                                cursor: 'pointer',
-                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                boxShadow: '0 4px 16px rgba(59, 130, 246, 0.4)'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
-                                e.currentTarget.style.boxShadow = '0 8px 24px rgba(59, 130, 246, 0.6)';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                                e.currentTarget.style.boxShadow = '0 4px 16px rgba(59, 130, 246, 0.4)';
-                            }}
-                        >
-                            <RefreshCw size={24} />
-                            <div style={{ flex: 1, textAlign: 'left' }}>
-                                <div style={{ fontSize: '1.0625rem', fontWeight: '700' }}>
-                                    🔄 Utilisateur existant
-                                </div>
-                                <div style={{ fontSize: '0.875rem', opacity: 0.9, fontWeight: '400' }}>
-                                    Récupérer mon identifiant
-                                </div>
-                            </div>
-                        </button>
-
-                        {/* Info */}
+                    {/* Option Email */}
+                    <div style={{
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        border: '2px solid rgba(96, 165, 250, 0.3)',
+                        borderRadius: '12px',
+                        padding: '1.5rem',
+                        marginBottom: '1.5rem'
+                    }}>
                         <div style={{
-                            marginTop: '1.5rem',
-                            padding: '1rem',
-                            background: 'rgba(59, 130, 246, 0.1)',
-                            border: '1px solid rgba(96, 165, 250, 0.2)',
-                            borderRadius: '8px',
-                            fontSize: '0.8125rem',
-                            color: 'rgba(147, 197, 253, 0.9)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            marginBottom: '1rem'
+                        }}>
+                            <Mail size={24} style={{ color: '#60a5fa' }} />
+                            <h3 style={{
+                                fontSize: '1.125rem',
+                                fontWeight: '600',
+                                color: 'rgba(255, 255, 255, 0.95)',
+                                margin: 0
+                            }}>
+                                📧 Récupérer mes incidents
+                            </h3>
+                        </div>
+                        <p style={{
+                            fontSize: '0.875rem',
+                            color: 'rgba(226, 232, 240, 0.7)',
+                            marginBottom: '1rem',
                             lineHeight: '1.5'
                         }}>
-                            <strong>💡 À savoir :</strong> Votre identifiant unique vous permet de retrouver tous vos incidents déclarés, même si vous changez d'appareil ou de navigateur.
-                        </div>
+                            Entrez votre email pour retrouver vos incidents sur n'importe quel appareil
+                        </p>
+
+                        <input
+                            type="email"
+                            placeholder="votre.email@example.com"
+                            value={email}
+                            onChange={handleEmailChange}
+                            style={{
+                                width: '100%',
+                                padding: '0.875rem 1rem',
+                                borderRadius: '8px',
+                                border: `2px solid ${isValidEmail ? '#10b981' : 'rgba(148, 163, 184, 0.3)'}`,
+                                background: 'rgba(15, 23, 42, 0.5)',
+                                color: 'rgba(255, 255, 255, 0.95)',
+                                fontSize: '0.9375rem',
+                                outline: 'none',
+                                marginBottom: '1rem',
+                                transition: 'all 0.2s ease'
+                            }}
+                            onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                            onBlur={(e) => e.target.style.borderColor = isValidEmail ? '#10b981' : 'rgba(148, 163, 184, 0.3)'}
+                        />
+
+                        <button
+                            onClick={handleRecoverWithEmail}
+                            disabled={!isValidEmail || loading}
+                            style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.5rem',
+                                padding: '0.875rem 1.5rem',
+                                background: isValidEmail ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' : 'rgba(148, 163, 184, 0.2)',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontSize: '1rem',
+                                fontWeight: '600',
+                                color: isValidEmail ? 'white' : 'rgba(148, 163, 184, 0.5)',
+                                cursor: isValidEmail && !loading ? 'pointer' : 'not-allowed',
+                                transition: 'all 0.2s ease',
+                                opacity: loading ? 0.6 : 1
+                            }}
+                        >
+                            {loading ? 'Récupération...' : 'Récupérer'}
+                            {!loading && <ArrowRight size={18} />}
+                        </button>
+                    </div>
+
+                    {/* Séparateur */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '1rem',
+                        margin: '1.5rem 0'
+                    }}>
+                        <div style={{ flex: 1, height: '1px', background: 'rgba(148, 163, 184, 0.2)' }} />
+                        <span style={{ color: 'rgba(148, 163, 184, 0.5)', fontSize: '0.875rem' }}>OU</span>
+                        <div style={{ flex: 1, height: '1px', background: 'rgba(148, 163, 184, 0.2)' }} />
+                    </div>
+
+                    {/* Option Skip */}
+                    <button
+                        onClick={handleSkip}
+                        style={{
+                            width: '100%',
+                            padding: '0.875rem 1.5rem',
+                            background: 'rgba(148, 163, 184, 0.1)',
+                            border: '1px solid rgba(148, 163, 184, 0.3)',
+                            borderRadius: '8px',
+                            fontSize: '0.9375rem',
+                            fontWeight: '500',
+                            color: 'rgba(226, 232, 240, 0.8)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(148, 163, 184, 0.15)';
+                            e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.5)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(148, 163, 184, 0.1)';
+                            e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+                        }}
+                    >
+                        ⏭️ Passer (Mode anonyme)
+                    </button>
+
+                    {/* Info */}
+                    <div style={{
+                        marginTop: '1.5rem',
+                        padding: '1rem',
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        border: '1px solid rgba(96, 165, 250, 0.2)',
+                        borderRadius: '8px',
+                        fontSize: '0.8125rem',
+                        color: 'rgba(147, 197, 253, 0.9)',
+                        lineHeight: '1.5'
+                    }}>
+                        <strong>💡 À savoir :</strong> L'email vous permet de retrouver vos incidents sur n'importe quel appareil. Le mode anonyme utilise un identifiant local unique à ce navigateur.
                     </div>
                 </div>
             </div>
-
-            {/* Modals */}
-            {showNewUserModal && (
-                <NewUserWelcome
-                    uuid={generatedUuid}
-                    onContinue={handleContinue}
-                />
-            )}
-
-            {showRecoverModal && (
-                <RecoverUuidModal
-                    isOpen={showRecoverModal}
-                    onClose={() => setShowRecoverModal(false)}
-                    onRecover={handleRecoverSuccess}
-                />
-            )}
 
             {/* Animations CSS */}
             <style>{`
@@ -291,7 +337,7 @@ const Welcome = () => {
                     50% { transform: translateY(-10px); }
                 }
             `}</style>
-        </>
+        </div>
     );
 };
 

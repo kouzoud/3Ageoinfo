@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authAPI, AuthManager } from '../services/api';
+import { storage, isPWAMode, migrateExistingData } from '../utils/storage';
 
 /**
  * Context d'authentification
@@ -29,14 +30,17 @@ export const AuthProvider = ({ children }) => {
    * Vérifie si un utilisateur est déjà connecté au montage
    */
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
+    // Migration des données existantes (une seule fois)
+    migrateExistingData();
+
+    const storedUser = storage.getItem('user');
     if (storedUser) {
       try {
         const userData = JSON.parse(storedUser);
         setUser(userData);
       } catch (error) {
         console.error('Erreur lors de la récupération de l\'utilisateur:', error);
-        localStorage.removeItem('user');
+        storage.removeItem('user');
       }
     }
     setLoading(false);
@@ -50,17 +54,23 @@ export const AuthProvider = ({ children }) => {
    */
   const login = async (email, password) => {
     setLoading(true);
-    
+
     try {
       // Appel à l'API backend - utiliser motDePasse au lieu de password
       const response = await authAPI.login({ email, motDePasse: password });
-      
+
       // La fonction authAPI.login stocke déjà les données dans localStorage
       const userData = {
         ...response.utilisateur,
         token: response.token,
       };
-      
+
+      // 🚫 BLOCAGE: Empêcher connexion pro/admin en mode PWA
+      if (isPWAMode() && (userData.role === 'PROFESSIONNEL' || userData.role === 'ADMIN')) {
+        setLoading(false);
+        throw new Error('❌ L\'application installée est réservée aux citoyens. Veuillez utiliser le navigateur web pour vous connecter en tant que ' + userData.role);
+      }
+
       setUser(userData);
       setLoading(false);
       return userData;
@@ -82,7 +92,7 @@ export const AuthProvider = ({ children }) => {
       console.error('Erreur lors de la déconnexion:', error);
     }
     setUser(null);
-    localStorage.removeItem('user');
+    storage.removeItem('user');
   };
 
   /**

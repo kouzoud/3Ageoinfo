@@ -25,11 +25,13 @@ import { fr } from 'date-fns/locale';
 
 import { incidentsAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useFilters } from '../contexts/FilterContext';
 import {
   SECTEURS,
   PROVINCES_MAP,
   STATUTS_INCIDENTS
 } from '../data/constants';
+import MultiSelectDropdown from '../components/MultiSelectDropdown';
 
 /**
  * Fonctions utilitaires
@@ -64,6 +66,20 @@ const formatDate = (dateString) => {
 const Incidents = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // Utiliser le context partagé pour les filtres
+  const { filters, updateFilters, resetFilters: resetGlobalFilters } = useFilters();
+
+  // État local pour multi-sélection - TEMPORAIRE (avant de cliquer sur Chercher)
+  const [tempSelectedSecteurs, setTempSelectedSecteurs] = useState([]);
+  const [tempSelectedProvinces, setTempSelectedProvinces] = useState([]);
+  const [tempSelectedStatuts, setTempSelectedStatuts] = useState([]);
+
+  // État APPLIQUÉ (après avoir cliqué sur Chercher)
+  const [appliedSecteurs, setAppliedSecteurs] = useState([]);
+  const [appliedProvinces, setAppliedProvinces] = useState([]);
+  const [appliedStatuts, setAppliedStatuts] = useState([]);
+
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -74,12 +90,6 @@ const Incidents = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [sortBy, setSortBy] = useState('dateDeclaration');
   const [sortOrder, setSortOrder] = useState('desc');
-
-  const [filters, setFilters] = useState({
-    secteur: '',
-    province: '',
-    statut: '',
-  });
 
   // Modal states
   const [showModal, setShowModal] = useState(false);
@@ -174,7 +184,9 @@ const Incidents = () => {
       padding: '20px',
       marginBottom: '16px',
       boxShadow: '0 4px 24px rgba(0, 0, 0, 0.06)',
-      border: '1px solid rgba(255, 255, 255, 0.18)'
+      border: '1px solid rgba(255, 255, 255, 0.18)',
+      position: 'relative',
+      zIndex: 100
     },
     filterGrid: {
       display: 'grid',
@@ -330,25 +342,24 @@ const Incidents = () => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(i =>
-        i.titre?.toLowerCase().includes(query) ||
         i.description?.toLowerCase().includes(query) ||
         String(i.id).includes(query)
       );
     }
 
-    // Secteur filter
-    if (filters.secteur) {
-      result = result.filter(i => i.secteurId === parseInt(filters.secteur));
+    // Secteur filter (multi-sélection) - utiliser les filtres APPLIQUÉS
+    if (appliedSecteurs.length > 0) {
+      result = result.filter(i => appliedSecteurs.includes(i.secteurId));
     }
 
-    // Province filter
-    if (filters.province) {
-      result = result.filter(i => i.provinceId === parseInt(filters.province));
+    // Province filter (multi-sélection)
+    if (appliedProvinces.length > 0) {
+      result = result.filter(i => appliedProvinces.includes(i.province));
     }
 
-    // Status filter
-    if (filters.statut) {
-      result = result.filter(i => i.statut === filters.statut);
+    // Status filter (multi-sélection)
+    if (appliedStatuts.length > 0) {
+      result = result.filter(i => appliedStatuts.includes(i.statut));
     }
 
     // Sort
@@ -368,7 +379,7 @@ const Incidents = () => {
     });
 
     return result;
-  }, [incidents, searchQuery, filters, sortBy, sortOrder]);
+  }, [incidents, searchQuery, appliedSecteurs, appliedProvinces, appliedStatuts, sortBy, sortOrder]);
 
   // Pagination
   const totalPages = Math.ceil(processedIncidents.length / itemsPerPage);
@@ -378,16 +389,40 @@ const Incidents = () => {
   );
 
   // Statistics
-  const stats = useMemo(() => ({
-    total: processedIncidents.length,
-    valides: processedIncidents.filter(i => i.statut === 'VALIDE' || i.statut === 'TRAITE').length,
-    enCours: processedIncidents.filter(i => i.statut === 'EN_COURS_DE_TRAITEMENT').length,
-    nouveaux: processedIncidents.filter(i => i.statut === 'REDIGE' || i.statut === 'PRISE_EN_COMPTE').length
-  }), [processedIncidents]);
+  const stats = useMemo(() => {
+    const total = processedIncidents.length;
+    const valides = processedIncidents.filter(i => i.statut === 'VALIDE' || i.statut === 'TRAITE').length;
+    const enCours = processedIncidents.filter(i => i.statut === 'EN_COURS_DE_TRAITEMENT').length;
+    // Autres = tous les incidents qui ne sont ni VALIDE/TRAITE ni EN_COURS
+    const autres = total - valides - enCours;
+
+    return { total, valides, enCours, autres };
+  }, [processedIncidents]);
+
+
+
+  // Fonction pour appliquer les filtres manuellement
+  const handleSearch = () => {
+    // Copier les sélections temporaires vers les appliquées
+    setAppliedSecteurs(tempSelectedSecteurs);
+    setAppliedProvinces(tempSelectedProvinces);
+    setAppliedStatuts(tempSelectedStatuts);
+    setCurrentPage(1);
+  };
 
   // Reset filters
   const resetFilters = () => {
-    setFilters({ secteur: '', province: '', statut: '' });
+    // Réinitialiser les sélections temporaires
+    setTempSelectedSecteurs([]);
+    setTempSelectedProvinces([]);
+    setTempSelectedStatuts([]);
+
+    // Réinitialiser aussi les filtres appliqués
+    setAppliedSecteurs([]);
+    setAppliedProvinces([]);
+    setAppliedStatuts([]);
+
+    // Réinitialiser aussi la recherche locale
     setSearchQuery('');
     setCurrentPage(1);
   };
@@ -511,7 +546,7 @@ const Incidents = () => {
           </div>
           <div style={styles.statBadge}>
             <AlertCircle size={16} />
-            {stats.nouveaux} nouveaux
+            {stats.autres} autres
           </div>
         </div>
       </div>
@@ -529,7 +564,7 @@ const Incidents = () => {
             }} />
             <input
               type="text"
-              placeholder="Rechercher un incident par titre, description ou ID..."
+              placeholder="Rechercher un incident par description ou ID..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -594,19 +629,13 @@ const Incidents = () => {
               }}>
                 Secteur
               </label>
-              <select
-                value={filters.secteur}
-                onChange={(e) => {
-                  setFilters(prev => ({ ...prev, secteur: e.target.value }));
-                  setCurrentPage(1);
-                }}
-                style={styles.select}
-              >
-                <option value="">Tous les secteurs</option>
-                {SECTEURS.map(s => (
-                  <option key={s.id} value={s.id}>{s.nom}</option>
-                ))}
-              </select>
+              <MultiSelectDropdown
+                label="Secteur"
+                options={SECTEURS.map(s => ({ value: s.id, label: s.nom }))}
+                selectedValues={tempSelectedSecteurs}
+                onChange={setTempSelectedSecteurs}
+                placeholder="Tous les secteurs"
+              />
             </div>
             <div>
               <label style={{
@@ -618,19 +647,13 @@ const Incidents = () => {
               }}>
                 Province
               </label>
-              <select
-                value={filters.province}
-                onChange={(e) => {
-                  setFilters(prev => ({ ...prev, province: e.target.value }));
-                  setCurrentPage(1);
-                }}
-                style={styles.select}
-              >
-                <option value="">Toutes les provinces</option>
-                {PROVINCES_MAP.map(p => (
-                  <option key={p.id} value={p.id}>{p.nom}</option>
-                ))}
-              </select>
+              <MultiSelectDropdown
+                label="Province"
+                options={PROVINCES_MAP.map(p => ({ value: p.nom, label: p.nom }))}
+                selectedValues={tempSelectedProvinces}
+                onChange={setTempSelectedProvinces}
+                placeholder="Toutes les provinces"
+              />
             </div>
             <div>
               <label style={{
@@ -642,19 +665,28 @@ const Incidents = () => {
               }}>
                 Statut
               </label>
-              <select
-                value={filters.statut}
-                onChange={(e) => {
-                  setFilters(prev => ({ ...prev, statut: e.target.value }));
-                  setCurrentPage(1);
+              <MultiSelectDropdown
+                label="Statut"
+                options={STATUTS_INCIDENTS.map(s => ({ value: s.value, label: s.label }))}
+                selectedValues={tempSelectedStatuts}
+                onChange={setTempSelectedStatuts}
+                placeholder="Tous les statuts"
+              />
+            </div>
+
+            {/* Bouton Chercher */}
+            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <button
+                onClick={handleSearch}
+                style={{
+                  ...styles.actionBtn,
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                  color: '#fff',
+                  width: '100%'
                 }}
-                style={styles.select}
               >
-                <option value="">Tous les statuts</option>
-                {STATUTS_INCIDENTS.map(s => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
+                🔍 Chercher
+              </button>
             </div>
           </div>
         </div>
@@ -733,8 +765,7 @@ const Incidents = () => {
             <table style={styles.table}>
               <thead>
                 <tr>
-                  <th style={styles.th}>ID</th>
-                  <th style={styles.th}>Titre / Description</th>
+                  <th style={styles.th}>Type / Description</th>
                   <th style={styles.th}>Secteur</th>
                   <th style={styles.th}>Province</th>
                   <th style={styles.th}>Statut</th>
@@ -760,21 +791,9 @@ const Incidents = () => {
                       onClick={() => openDetailModal(incident)}
                     >
                       <td style={styles.td}>
-                        <span style={{
-                          background: '#eff6ff',
-                          color: '#2563eb',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          fontSize: '0.8rem',
-                          fontWeight: '600'
-                        }}>
-                          #{incident.id}
-                        </span>
-                      </td>
-                      <td style={styles.td}>
                         <div>
                           <div style={{ fontWeight: '600', color: '#1e293b', marginBottom: '4px' }}>
-                            {incident.titre || incident.typeIncident || 'Sans titre'}
+                            {incident.typeIncident || 'Incident'}
                           </div>
                           <div style={{
                             fontSize: '0.85rem',
@@ -908,7 +927,7 @@ const Incidents = () => {
                     </span>
                   </div>
                   <h4 style={{ margin: '0 0 8px 0', color: '#1e293b', fontSize: '1rem' }}>
-                    {incident.titre || incident.typeIncident || 'Sans titre'}
+                    {incident.typeIncident || 'Incident'}
                   </h4>
                   <p style={{
                     color: '#64748b',
@@ -1215,8 +1234,32 @@ const Incidents = () => {
             </div>
             <div style={{ padding: '24px' }}>
               <h2 style={{ margin: '0 0 16px 0', color: '#1e293b' }}>
-                {selectedIncident.titre || selectedIncident.typeIncident || 'Incident'}
+                {selectedIncident.typeIncident || 'Incident'}
               </h2>
+
+              {/* Photo de l'incident */}
+              {selectedIncident.photoUrl && (
+                <div style={{
+                  marginBottom: '20px',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <img
+                    src={selectedIncident.photoUrl}
+                    alt="Photo de l'incident"
+                    style={{
+                      width: '100%',
+                      maxHeight: '350px',
+                      objectFit: 'cover',
+                      display: 'block'
+                    }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                 <div>
@@ -1242,7 +1285,7 @@ const Incidents = () => {
                 <div>
                   <label style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Province</label>
                   <span style={{ color: '#1e293b' }}>
-                    {getProvinceNom(selectedIncident.provinceId) || 'Non renseigné'}
+                    {selectedIncident.province || 'Non renseigné'}
                   </span>
                 </div>
                 <div>

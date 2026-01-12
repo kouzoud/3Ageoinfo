@@ -2,6 +2,7 @@
  * Service API centralisé avec configuration Axios
  * Intégration complète Backend Spring Boot <-> Frontend React
  */
+import { storage } from '../utils/storage';
 
 // Configuration de base
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8085/api';
@@ -11,13 +12,13 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8085
  */
 class AuthManager {
   static getToken() {
-    const user = localStorage.getItem('user');
+    const user = storage.getItem('user');
     if (user) {
       try {
         const userData = JSON.parse(user);
         return userData.token;
       } catch (e) {
-        console.warn('Token invalide dans localStorage');
+        console.warn('Token invalide dans storage');
         this.clearToken();
         return null;
       }
@@ -27,15 +28,16 @@ class AuthManager {
 
   static setToken(token, userData = null) {
     if (userData) {
-      localStorage.setItem('user', JSON.stringify({ token, ...userData }));
+      storage.setItem('user', JSON.stringify({ token, ...userData }));
     } else {
-      localStorage.setItem('token', token);
+      storage.setItem('token', token);
     }
   }
 
   static clearToken() {
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
+    storage.removeItem('user');
+    storage.removeItem('token');
+    storage.removeItem('role');
   }
 
   static isAuthenticated() {
@@ -44,7 +46,7 @@ class AuthManager {
   }
 
   static getUser() {
-    const user = localStorage.getItem('user');
+    const user = storage.getItem('user');
     if (user) {
       try {
         return JSON.parse(user);
@@ -320,6 +322,18 @@ export const publicAPI = {
   },
 
   /**
+   * Récupère les incidents par email citoyen
+   * @param {string} email - Email du citoyen
+   * @returns {Promise<Array>} Liste des incidents
+   */
+  getIncidentsByEmail: async (email) => {
+    return apiClient.fetchRequest({
+      method: 'GET',
+      url: `/incidents/by-email/${encodeURIComponent(email)}`
+    });
+  },
+
+  /**
    * Récupère les secteurs (endpoint public)
    * @returns {Promise<Array>} Liste des secteurs
    */
@@ -373,7 +387,7 @@ export const authAPI = {
       AuthManager.setToken(response.token, response.utilisateur);
 
       if (response.utilisateur && response.utilisateur.role) {
-        localStorage.setItem('role', response.utilisateur.role);
+        storage.setItem('role', response.utilisateur.role);
       }
 
       return response;
@@ -386,7 +400,6 @@ export const authAPI = {
   // Déconnexion
   logout: () => {
     AuthManager.clearToken();
-    localStorage.removeItem('role');
     window.location.href = '/connexion';
   },
 
@@ -397,12 +410,12 @@ export const authAPI = {
   isAuthenticated: () => AuthManager.isAuthenticated(),
 
   // Récupère le rôle de l'utilisateur
-  getUserRole: () => localStorage.getItem('role'),
+  getUserRole: () => storage.getItem('role'),
 
   // Vérifie les permissions
-  isAdmin: () => localStorage.getItem('role') === 'ADMIN',
-  isProfessionnel: () => localStorage.getItem('role') === 'PROFESSIONNEL',
-  isCitoyen: () => localStorage.getItem('role') === 'CITOYEN'
+  isAdmin: () => storage.getItem('role') === 'ADMIN',
+  isProfessionnel: () => storage.getItem('role') === 'PROFESSIONNEL',
+  isCitoyen: () => storage.getItem('role') === 'CITOYEN'
 };
 
 // Export du client API et du gestionnaire d'authentification
@@ -460,7 +473,28 @@ export const professionnelAPI = {
     method: 'PUT',
     url: `/professionnel/incidents/${id}/traiter`,
     data: { descriptionTraitement: description }
-  })
+  }),
+  bloquerIncident: (id, motif) => apiClient.request({
+    method: 'PUT',
+    url: `/professionnel/incidents/${id}/bloquer`,
+    data: { motif: motif }
+  }),
+  debloquerIncident: (id) => apiClient.request({
+    method: 'PUT',
+    url: `/professionnel/incidents/${id}/debloquer`
+  }),
+
+  // Fonction pour mise à jour flexible du statut (SANS CONTRAINTE D'ENCHAÎNEMENT)
+  updateStatus: async (id, { statut, commentaire }) => {
+    return apiClient.request({
+      method: 'PUT',
+      url: `/professionnel/incidents/${id}/update-statut`,
+      data: {
+        statut: statut,
+        commentaire: commentaire || ''
+      }
+    });
+  }
 };
 
 /**

@@ -5,6 +5,7 @@ import { Filter, AlertCircle } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import MultiSelectDropdown from '../components/MultiSelectDropdown';
 
 // CSS pour les marqueurs personnalisés
 const markerStyles = `
@@ -145,6 +146,7 @@ if (typeof document !== 'undefined') {
 }
 import { incidentsAPI, secteursAPI, provincesAPI } from '../services/api';
 import { PROVINCES_MAP, STATUTS_INCIDENTS, getStatut, getProvinceNom } from '../data/constants';
+import { useFilters } from '../contexts/FilterContext';
 
 // Création d'icônes personnalisées pour les incidents
 const createCustomIcon = (color, symbol) => {
@@ -280,26 +282,25 @@ const MapView = () => {
   const [filteredIncidents, setFilteredIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filters, setFilters] = useState({
-    secteur: '',
-    province: '',
-    statut: '',
-  });
+
+  // Utiliser le context partagé pour les filtres
+  const { filters, updateFilters, resetFilters: resetGlobalFilters } = useFilters();
+
+  // État local temporaire pour les modifications avant application
+  const [selectedSecteurs, setSelectedSecteurs] = useState([]);
+  const [selectedProvinces, setSelectedProvinces] = useState([]);
+  const [selectedStatuts, setSelectedStatuts] = useState([]);
+
   const [showClusters, setShowClusters] = useState(true);
   const [secteurs, setSecteurs] = useState([]);
   const [targetIncident, setTargetIncident] = useState(null);
   const [legendExpanded, setLegendExpanded] = useState(false);
   const [provincesGeoJSON, setProvincesGeoJSON] = useState(null);
-  const [selectedBaseLayer, setSelectedBaseLayer] = useState('osm');
+  const [selectedBaseLayer, setSelectedBaseLayer] = useState('satellite');
   const markerRefs = useRef({});
 
   // Définition des fonds de carte disponibles
   const baseLayers = {
-    osm: {
-      name: 'OpenStreetMap',
-      url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    },
     satellite: {
       name: 'Satellite',
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -308,16 +309,6 @@ const MapView = () => {
     dark: {
       name: 'Dark',
       url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-    },
-    terrain: {
-      name: 'Terrain',
-      url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-      attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
-    },
-    light: {
-      name: 'Light',
-      url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
     }
   };
@@ -433,16 +424,6 @@ const MapView = () => {
   }, [incidents]); // Ne dépend que des incidents, pas des filtres
 
   /**
-   * Gère le changement de filtre (sans appliquer automatiquement)
-   */
-  const handleFilterChange = (filterName, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [filterName]: value
-    }));
-  };
-
-  /**
    * Applique les filtres manuellement quand on clique sur "Chercher"
    */
   const handleSearch = () => {
@@ -455,20 +436,22 @@ const MapView = () => {
       return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
     });
 
-    if (filters.secteur) {
-      filtered = filtered.filter(i => i.secteurId === parseInt(filters.secteur));
+    // Filtrer par secteurs (si sélectionnés)
+    if (selectedSecteurs.length > 0) {
+      filtered = filtered.filter(i => selectedSecteurs.includes(i.secteurId));
     }
 
-    if (filters.province) {
-      // Comparer avec le nom de province (string) au lieu de provinceId
-      filtered = filtered.filter(i => i.province === filters.province);
+    // Filtrer par provinces (si sélectionnées)
+    if (selectedProvinces.length > 0) {
+      filtered = filtered.filter(i => selectedProvinces.includes(i.province));
     }
 
-    if (filters.statut) {
-      filtered = filtered.filter(i => i.statut === filters.statut);
+    // Filtrer par statuts (si sélectionnés)
+    if (selectedStatuts.length > 0) {
+      filtered = filtered.filter(i => selectedStatuts.includes(i.statut));
     }
 
-    console.log('Filtres appliqués:', filters);
+    console.log('Multi-filtres appliqués:', { secteurs: selectedSecteurs, provinces: selectedProvinces, statuts: selectedStatuts });
     console.log('Incidents filtrés:', filtered);
     setFilteredIncidents(filtered);
   };
@@ -477,7 +460,11 @@ const MapView = () => {
    * Réinitialise les filtres ET réaffiche tous les incidents
    */
   const resetFilters = () => {
-    setFilters({ secteur: '', province: '', statut: '' });
+    // Réinitialiser les filtres globaux
+    resetGlobalFilters();
+
+    // Réinitialiser aussi les filtres temporaires
+    setTempFilters({ secteur: '', province: '', statut: '' });
 
     // Réafficher tous les incidents avec coordonnées valides
     const validIncidents = incidents.filter(incident => {
@@ -517,7 +504,7 @@ const MapView = () => {
         </div>
 
         {/* Filtres */}
-        <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card" style={{ marginBottom: '1.5rem', position: 'relative', zIndex: 1000 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <Filter size={20} style={{ marginRight: '0.5rem' }} />
@@ -536,50 +523,35 @@ const MapView = () => {
           <div className="grid grid-4">
             <div className="form-group">
               <label className="form-label">Secteur</label>
-              <select
-                className="form-select"
-                value={filters.secteur}
-                onChange={(e) => handleFilterChange('secteur', e.target.value)}
-              >
-                <option value="">Tous les secteurs</option>
-                {secteurs && secteurs.map(secteur => secteur && secteur.id ? (
-                  <option key={secteur.id} value={secteur.id}>
-                    {secteur.nom}
-                  </option>
-                ) : null)}
-              </select>
+              <MultiSelectDropdown
+                label="Secteur"
+                options={secteurs.map(s => ({ value: s.id, label: s.nom }))}
+                selectedValues={selectedSecteurs}
+                onChange={setSelectedSecteurs}
+                placeholder="Tous les secteurs"
+              />
             </div>
 
             <div className="form-group">
               <label className="form-label">Province</label>
-              <select
-                className="form-select"
-                value={filters.province}
-                onChange={(e) => handleFilterChange('province', e.target.value)}
-              >
-                <option value="">Toutes les provinces</option>
-                {PROVINCES_MAP && PROVINCES_MAP.map(province => province && province.id ? (
-                  <option key={province.id} value={province.nom}>
-                    {province.nom}
-                  </option>
-                ) : null)}
-              </select>
+              <MultiSelectDropdown
+                label="Province"
+                options={PROVINCES_MAP.map(p => ({ value: p.nom, label: p.nom }))}
+                selectedValues={selectedProvinces}
+                onChange={setSelectedProvinces}
+                placeholder="Toutes les provinces"
+              />
             </div>
 
             <div className="form-group">
               <label className="form-label">Statut</label>
-              <select
-                className="form-select"
-                value={filters.statut}
-                onChange={(e) => handleFilterChange('statut', e.target.value)}
-              >
-                <option value="">Tous les statuts</option>
-                {STATUTS_INCIDENTS.map(statut => (
-                  <option key={statut.value} value={statut.value}>
-                    {statut.label}
-                  </option>
-                ))}
-              </select>
+              <MultiSelectDropdown
+                label="Statut"
+                options={STATUTS_INCIDENTS.map(s => ({ value: s.value, label: s.label }))}
+                selectedValues={selectedStatuts}
+                onChange={setSelectedStatuts}
+                placeholder="Tous les statuts"
+              />
             </div>
 
             <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem' }}>
@@ -592,7 +564,16 @@ const MapView = () => {
               </button>
               <button
                 className="btn btn-secondary"
-                onClick={resetFilters}
+                onClick={() => {
+                  setSelectedSecteurs([]);
+                  setSelectedProvinces([]);
+                  setSelectedStatuts([]);
+                  setFilteredIncidents(incidents.filter(incident => {
+                    const lat = parseFloat(incident.latitude);
+                    const lng = parseFloat(incident.longitude);
+                    return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+                  }));
+                }}
                 style={{ flex: '1' }}
               >
                 🔄 Réinitialiser
@@ -602,13 +583,13 @@ const MapView = () => {
         </div>
 
         {/* Carte */}
-        <div style={{ height: '600px', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', position: 'relative' }}>
+        <div style={{ height: '600px', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', position: 'relative', zIndex: 1 }}>
           {/* Légende LIVE MONITOR - Version Simplifiée */}
           <div style={{
             position: 'absolute',
             top: '15px',
             left: '15px',
-            zIndex: 1000,
+            zIndex: 500,
             backgroundColor: 'rgba(30, 41, 59, 0.95)',
             color: 'white',
             borderRadius: '12px',
@@ -840,7 +821,7 @@ const MapView = () => {
             position: 'absolute',
             top: '15px',
             right: '15px',
-            zIndex: 1000,
+            zIndex: 500,
             backgroundColor: 'rgba(30, 41, 59, 0.95)',
             borderRadius: '12px',
             padding: '12px',
@@ -1038,7 +1019,7 @@ const MapView = () => {
                               color: '#fff',
                               textShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
                             }}>
-                              {incident.titre || incident.typeIncident}
+                              {incident.typeIncident}
                             </h3>
                           </div>
 
@@ -1279,7 +1260,7 @@ const MapView = () => {
                             color: '#fff',
                             textShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
                           }}>
-                            {incident.titre || incident.typeIncident}
+                            {incident.typeIncident}
                           </h3>
                         </div>
 

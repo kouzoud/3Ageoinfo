@@ -2,7 +2,7 @@
   "name": "CityAlert - Signalement d'Incidents Urbains",
   "short_name": "CityAlert",
   "description": "Application de signalement d'incidents urbains - Alertez et suivez les problèmes de votre ville en temps réel",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "id": "/",
   "display": "standalone",

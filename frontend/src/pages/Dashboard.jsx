@@ -24,9 +24,9 @@ import { fr } from 'date-fns/locale';
 import StatCard from '../components/dashboard/StatCard';
 import LineChartCard from '../components/dashboard/LineChartCard';
 import DonutChartCard from '../components/dashboard/DonutChartCard';
+import ProvinceDonutChart from '../components/dashboard/ProvinceDonutChart';
 import ProvincesList from '../components/dashboard/ProvincesList';
 import TimeFilter from '../components/dashboard/TimeFilter';
-import PerformanceCard from '../components/dashboard/PerformanceCard';
 
 // API et constantes
 import { incidentsAPI } from '../services/api';
@@ -57,6 +57,22 @@ const Dashboard = () => {
       setLoading(true);
       setError(null);
       const data = await incidentsAPI.getAll();
+
+      // DEBUG: Afficher les données reçues
+      console.log('=== DEBUG DASHBOARD ===');
+      console.log('Total incidents reçus:', data.length);
+      console.log('Premier incident:', data[0]);
+
+      // Compter les statuts
+      const statusCount = {};
+      data.forEach(i => {
+        const s = i.statut;
+        statusCount[s] = (statusCount[s] || 0) + 1;
+      });
+      console.log('Statuts:', statusCount);
+      console.log('Incidents TRAITE:', data.filter(i => i.statut === 'TRAITE'));
+      console.log('=====================');
+
       setIncidents(data);
     } catch (err) {
       console.error('Erreur de récupération des incidents:', err);
@@ -103,14 +119,12 @@ const Dashboard = () => {
     const total = filteredIncidents.length;
     const traites = filteredIncidents.filter(i => i.statut === 'TRAITE').length;
     const enCours = filteredIncidents.filter(i => i.statut === 'EN_COURS_DE_TRAITEMENT').length;
-    const valides = filteredIncidents.filter(i => i.statut === 'VALIDE').length;
-    const priseEnCompte = filteredIncidents.filter(i => i.statut === 'PRISE_EN_COMPTE').length;
-    const rediges = filteredIncidents.filter(i => i.statut === 'REDIGE').length;
-    const nouveaux = valides + priseEnCompte + rediges;
+
+    const autres = total - traites - enCours;
 
     const tauxResolution = total > 0 ? ((traites / total) * 100).toFixed(1) : 0;
 
-    return { total, traites, enCours, nouveaux, tauxResolution };
+    return { total, traites, enCours, autres, tauxResolution };
   }, [filteredIncidents]);
 
   /**
@@ -158,7 +172,7 @@ const Dashboard = () => {
   }, [incidents]);
 
   /**
-   * Données pour les provinces
+   * Données pour les provinces (Top 5 liste)
    */
   const provinceData = useMemo(() => {
     const provinceCount = {};
@@ -171,6 +185,26 @@ const Dashboard = () => {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
+  }, [filteredIncidents]);
+
+  /**
+   * Données pour le donut chart des provinces
+   */
+  const provinceDonutData = useMemo(() => {
+    const provinceCount = {};
+    filteredIncidents.forEach(incident => {
+      const province = incident.province || 'Inconnu';
+      provinceCount[province] = (provinceCount[province] || 0) + 1;
+    });
+
+    const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#ef4444', '#84cc16'];
+    return Object.entries(provinceCount)
+      .map(([name, value], index) => ({
+        name,
+        value,
+        color: colors[index % colors.length]
+      }))
+      .sort((a, b) => b.value - a.value);
   }, [filteredIncidents]);
 
 
@@ -216,62 +250,65 @@ const Dashboard = () => {
         </div>
       </header>
 
-      {/* Filtres temporels */}
-      <div className="dashboard-filters">
-        <TimeFilter
-          selectedPeriod={selectedPeriod}
-          onPeriodChange={setSelectedPeriod}
-          onRefresh={fetchIncidents}
-          loading={loading}
-        />
-      </div>
-
-      {/* Cartes KPI */}
-      <div className="dashboard-stats-grid">
-        <StatCard
-          icon={AlertCircle}
-          label="Total Incidents"
-          value={stats.total}
-          color="primary"
-          trendLabel="sur la période"
-        />
-        <StatCard
-          icon={CheckCircle}
-          label="Incidents Traités"
-          value={stats.traites}
-          trend={parseFloat(stats.tauxResolution)}
-          trendLabel="de résolution"
-          color="success"
-        />
-        <StatCard
-          icon={Clock}
-          label="En Cours"
-          value={stats.enCours}
-          color="warning"
-          trendLabel="en traitement"
-        />
-        <StatCard
-          icon={TrendingUp}
-          label="Nouveaux"
-          value={stats.nouveaux}
-          color="info"
-          trendLabel="à traiter"
-        />
-      </div>
-
-      {/* Graphiques */}
-      <div className="dashboard-charts-grid">
-        <div className="dashboard-chart-item">
-          <LineChartCard
-            data={evolutionData}
-            title="Évolution sur 7 jours"
+      {/* Section filtrée - Éléments contrôlés par le filtre temporel */}
+      <div className="dashboard-filtered-section">
+        {/* Filtres temporels */}
+        <div className="dashboard-filters">
+          <TimeFilter
+            selectedPeriod={selectedPeriod}
+            onPeriodChange={setSelectedPeriod}
+            onRefresh={fetchIncidents}
+            loading={loading}
           />
         </div>
-        <div className="dashboard-chart-item">
-          <DonutChartCard
-            data={secteurData}
-            title="Répartition par Secteur"
+
+        {/* Cartes KPI */}
+        <div className="dashboard-stats-grid">
+          <StatCard
+            icon={AlertCircle}
+            label="Total Incidents"
+            value={stats.total}
+            color="primary"
+            trendLabel="sur la période"
           />
+          <StatCard
+            icon={CheckCircle}
+            label="Incidents Traités"
+            value={stats.traites}
+            trend={parseFloat(stats.tauxResolution)}
+            trendLabel="de résolution"
+            color="success"
+          />
+          <StatCard
+            icon={Clock}
+            label="En Cours"
+            value={stats.enCours}
+            color="warning"
+            trendLabel="en traitement"
+          />
+          <StatCard
+            icon={TrendingUp}
+            label="Autres"
+            value={stats.autres}
+            color="info"
+            trendLabel="en attente"
+          />
+        </div>
+
+        {/* Graphiques */}
+        <div className="dashboard-charts-grid">
+          <div className="dashboard-chart-item">
+            <ProvinceDonutChart
+              data={provinceDonutData}
+              title="Répartition par Province"
+            />
+          </div>
+          <div className="dashboard-chart-item">
+            <DonutChartCard
+              data={secteurData}
+              title="Répartition par Secteur"
+            />
+          </div>
         </div>
       </div>
 
@@ -285,16 +322,9 @@ const Dashboard = () => {
           />
         </div>
         <div className="dashboard-bottom-item">
-          <PerformanceCard
-            tauxResolution={parseFloat(stats.tauxResolution)}
-            provincesCount={Object.keys(
-              filteredIncidents.reduce((acc, i) => {
-                if (i.province) acc[i.province] = true;
-                return acc;
-              }, {})
-            ).length}
-            secteursCount={SECTEURS.length}
-            incidentsBlocked={filteredIncidents.filter(i => i.statut === 'BLOQUE').length}
+          <LineChartCard
+            data={evolutionData}
+            title="Évolution sur 7 jours"
           />
         </div>
       </div>

@@ -27,51 +27,6 @@ import { useMemo } from 'react';
 // CONSTANTES - Suggestions & Exemples
 // ============================================
 
-// Suggestions de titres par type d'incident
-const TITRE_SUGGESTIONS = {
-  'Voirie': [
-    'Nid-de-poule dangereux sur la chaussée',
-    'Chaussée dégradée nécessitant réparation',
-    'Trottoir endommagé',
-    'Revêtement routier abîmé'
-  ],
-  'Éclairage public': [
-    'Lampadaire éteint',
-    'Éclairage public défaillant',
-    'Ampoule cassée sur lampadaire',
-    'Absence d\'éclairage nocturne'
-  ],
-  'Assainissement': [
-    'Fuite d\'eau sur la voie publique',
-    'Égout bouché',
-    'Débordement de canalisation',
-    'Odeurs d\'assainissement'
-  ],
-  'Espaces verts': [
-    'Arbre dangereux menaçant de tomber',
-    'Branches cassées',
-    'Jardin public mal entretenu',
-    'Haie obstruant la visibilité'
-  ],
-  'Propreté': [
-    'Dépôt sauvage de déchets',
-    'Conteneur débordant',
-    'Graffiti sur mur public',
-    'Détritus non ramassés'
-  ],
-  'Sécurité': [
-    'Signalisation routière manquante',
-    'Panneau de signalisation endommagé',
-    'Passage piéton effacé',
-    'Barrière de sécurité défaillante'
-  ],
-  'Transport': [
-    'Arrêt de bus endommagé',
-    'Abribus cassé',
-    'Signalisation transport manquante'
-  ]
-};
-
 // Exemples de description par secteur
 const DESCRIPTION_EXEMPLES = {
   'Infrastructure': 'Ex: Localisation précise, dimensions du dégât, danger immédiat pour la circulation, fréquentation du lieu...',
@@ -125,7 +80,6 @@ const DeclarerIncident = () => {
       user?.role === 'admin' || user?.role === 'professionnel');
 
   const [formData, setFormData] = useState({
-    titre: '',
     description: '',
     typeIncident: '',
     secteurId: ''
@@ -172,14 +126,9 @@ const DeclarerIncident = () => {
     const errors = {};
 
     switch (name) {
-      case 'titre':
-        if (!value.trim()) errors.titre = 'Le titre est obligatoire';
-        else if (value.length < 5) errors.titre = 'Le titre doit contenir au moins 5 caractères';
-        else if (value.length > 100) errors.titre = 'Le titre ne peut pas dépasser 100 caractères';
-        break;
       case 'description':
-        if (!value.trim()) errors.description = 'La description est obligatoire';
-        else if (value.length < 20) errors.description = 'La description doit contenir au moins 20 caractères';
+        // Description optionnelle - juste vérifier la longueur minimale si remplie
+        if (value.trim() && value.length < 20) errors.description = 'La description doit contenir au moins 20 caractères si vous en ajoutez une';
         break;
       case 'typeIncident':
         if (!value) errors.typeIncident = 'Le type d\'incident est obligatoire';
@@ -592,7 +541,7 @@ const DeclarerIncident = () => {
       // Validation complète du formulaire
       const allErrors = {};
       Object.keys(formData).forEach(key => {
-        if (['titre', 'description', 'typeIncident', 'secteurId'].includes(key)) {
+        if (['description', 'typeIncident', 'secteurId'].includes(key)) {
           const fieldError = validateField(key, formData[key]);
           Object.assign(allErrors, fieldError);
         }
@@ -617,14 +566,14 @@ const DeclarerIncident = () => {
 
       // Préparer les données pour l'API - avec géolocalisation automatique
       const incidentData = {
-        titre: formData.titre,
         typeIncident: formData.typeIncident,
         description: formData.description,
         latitude: geoData.latitude,
         longitude: geoData.longitude,
         accuracy: geoData.accuracy, // Précision GPS en mètres
         secteurId: parseInt(formData.secteurId),
-        deviceId: deviceId // Identifiant anonyme du citoyen (UUID)
+        deviceId: deviceId, // Identifiant anonyme du citoyen (UUID)
+        citizenEmail: localStorage.getItem('citizenEmail') || null // Email si disponible
       };
 
       // Si hors-ligne, sauvegarder dans la file d'attente
@@ -650,7 +599,6 @@ const DeclarerIncident = () => {
         setError('Connexion impossible. L\'incident a été sauvegardé localement.');
         try {
           const incidentData = {
-            titre: formData.titre,
             typeIncident: formData.typeIncident,
             description: formData.description,
             latitude: null, // Sera récupéré à la synchronisation
@@ -675,7 +623,6 @@ const DeclarerIncident = () => {
   // Fonction pour réinitialiser le formulaire
   const resetForm = () => {
     setFormData({
-      titre: '',
       description: '',
       typeIncident: '',
       secteurId: ''
@@ -741,52 +688,12 @@ const DeclarerIncident = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="card">
-            {/* Titre */}
-            <div className="form-group enhanced">
-              <label htmlFor="titre" className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FileText size={16} />
-                Titre de l'incident *
-              </label>
-              <input
-                type="text"
-                id="titre"
-                name="titre"
-                list="titre-suggestions"
-                value={formData.titre}
-                onChange={handleChange}
-                className={`form-input ${fieldErrors.titre ? 'error' : formData.titre.length >= 5 ? 'success' : ''}`}
-                placeholder="Ex: Nid de poule sur l'avenue Mohammed V"
-                maxLength="100"
-                required
-              />
-              {/* Datalist pour suggestions */}
-              <datalist id="titre-suggestions">
-                {formData.typeIncident && TITRE_SUGGESTIONS[formData.typeIncident]?.map((suggestion, idx) => (
-                  <option key={idx} value={suggestion} />
-                ))}
-              </datalist>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
-                {fieldErrors.titre && (
-                  <span style={{ color: 'var(--danger-color)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                    <AlertCircle size={12} />
-                    {fieldErrors.titre}
-                  </span>
-                )}
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: 'auto' }}>
-                  {formData.titre.length}/100
-                </span>
-              </div>
-              <div className="form-help" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                <Info size={12} />
-                {formData.typeIncident ? '💡 Suggestions disponibles ci-dessus' : 'Soyez précis et concis'}
-              </div>
-            </div>
 
             {/* Description */}
             <div className="form-group enhanced">
               <label htmlFor="description" className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <FileText size={16} />
-                Description détaillée *
+                Description détaillée (optionnelle)
               </label>
               <textarea
                 id="description"
@@ -800,7 +707,6 @@ const DeclarerIncident = () => {
                   return secteur ? DESCRIPTION_EXEMPLES[secteur.nom] || '📝 Décrivez l\'incident...' : '📝 Décrivez l\'incident...';
                 }, [formData.secteurId, secteurs])}
                 maxLength="500"
-                required
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
                 {fieldErrors.description && (
@@ -815,7 +721,7 @@ const DeclarerIncident = () => {
               </div>
               <div className="form-help" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                 <Info size={12} />
-                💡 Plus vous êtes précis, plus l'intervention sera rapide
+                💡 Optionnelle mais recommandée - Plus vous êtes précis, plus l'intervention sera rapide
               </div>
             </div>
 
@@ -1105,22 +1011,26 @@ const DeclarerIncident = () => {
             )}
 
             {/* Résumé avant soumission */}
-            {formData.titre && formData.description && formData.typeIncident && formData.secteurId && formData.ime && (
+            {formData.typeIncident && formData.secteurId && formData.photo && (
               <div style={{
-                border: '1px solid var(--success-color)',
-                borderRadius: '8px',
-                padding: '1rem',
-                backgroundColor: 'rgba(16, 185, 129, 0.05)',
-                marginBottom: '1rem'
+                marginTop: '2rem',
+                padding: '1.5rem',
+                background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                borderRadius: '12px',
+                border: '2px solid #3b82f6'
               }}>
-                <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: 'var(--success-color)' }}>
-                  <CheckCircle2 size={16} />
-                  Résumé de votre déclaration
-                </h4>
-                <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
-                  <p><strong>Incident:</strong> {formData.titre}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <CheckCircle2 size={20} style={{ color: '#10b981' }} />
+                  <h3 style={{ color: '#1e3a8a', margin: 0, fontSize: '1.1rem' }}>
+                    ✅ Bravo! Votre déclaration est prête
+                  </h3>
+                </div>
+                <div style={{ fontSize: '0.9rem', color: '#1e40af' }}>
                   <p><strong>Type:</strong> {formData.typeIncident}</p>
                   <p><strong>Secteur:</strong> {secteurs.find(s => s.id == formData.secteurId)?.nom || 'N/A'}</p>
+                  {formData.description && (
+                    <p><strong>Description:</strong> {formData.description.substring(0, 100)}{formData.description.length > 100 ? '...' : ''}</p>
+                  )}
                   <p style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                     <MapPin size={14} />
                     <strong>Position GPS:</strong> <span style={{ color: 'var(--primary-color)' }}>Capturée automatiquement à l'envoi</span>

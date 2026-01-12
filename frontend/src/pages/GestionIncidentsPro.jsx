@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
-import { incidentsAPI } from '../services/api';
+import { incidentsAPI, professionnelAPI } from '../services/api';
+import { showToast } from '../components/Toast';
 import {
   Briefcase,
   Clock,
@@ -53,14 +54,36 @@ const GestionIncidentsPro = () => {
   const [statusComment, setStatusComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Statuts disponibles pour les professionnels
+  // Statuts disponibles pour les professionnels avec hiérarchie
   const STATUTS_PRO = [
-    { value: 'PRIS_EN_COMPTE', label: 'Pris en compte', color: '#6366f1', icon: Eye, description: 'Vous avez vu l\'incident et allez le traiter' },
-    { value: 'EN_COURS_DE_TRAITEMENT', label: 'En cours de traitement', color: '#f59e0b', icon: Play, description: 'Vous êtes en train de résoudre le problème' },
-    { value: 'TRAITE', label: 'Traité', color: '#10b981', icon: Check, description: 'Le problème est résolu (description obligatoire)' },
-    { value: 'BLOQUE', label: 'Bloqué', color: '#ef4444', icon: Ban, description: 'Impossible de traiter pour l\'instant (motif obligatoire)' },
-    { value: 'REDIRIGE', label: 'Redirigé', color: '#8b5cf6', icon: Share2, description: 'Transféré vers un autre service' }
+    { value: 'PRIS_EN_COMPTE', label: 'Pris en compte', color: '#6366f1', icon: Eye, description: 'Vous avez vu l\'incident et allez le traiter', ordre: 1 },
+    { value: 'EN_COURS_DE_TRAITEMENT', label: 'En cours de traitement', color: '#f59e0b', icon: Play, description: 'Vous êtes en train de résoudre le problème', ordre: 2 },
+    { value: 'TRAITE', label: 'Traité', color: '#10b981', icon: Check, description: 'Le problème est résolu (description obligatoire)', ordre: 3 },
+    { value: 'BLOQUE', label: 'Bloqué', color: '#ef4444', icon: Ban, description: 'Impossible de traiter pour l\'instant (motif obligatoire)', ordre: 99 },
+    { value: 'REDIRIGE', label: 'Redirigé', color: '#8b5cf6', icon: Share2, description: 'Transféré vers un autre service', ordre: 99 }
   ];
+
+  // Fonction pour vérifier si un statut peut être sélectionné
+  const isStatusDisabled = (statutValue, currentStatut) => {
+    if (!currentStatut) return false;
+
+    // Bloquer si c'est le statut actuel (on ne peut pas resélectionner le même)
+    if (statutValue === currentStatut) return true;
+
+    const currentStatutInfo = STATUTS_PRO.find(s => s.value === currentStatut);
+    const targetStatutInfo = STATUTS_PRO.find(s => s.value === statutValue);
+
+    if (!currentStatutInfo || !targetStatutInfo) return false;
+
+    // Si le statut actuel est BLOQUE ou REDIRIGE, on peut changer vers n'importe quel statut (sauf lui-même)
+    if (currentStatutInfo.ordre === 99) return false;
+
+    // Si le statut cible est BLOQUE ou REDIRIGE, toujours autorisé
+    if (targetStatutInfo.ordre === 99) return false;
+
+    // Bloquer les retours en arrière ET les statuts de même niveau
+    return targetStatutInfo.ordre <= currentStatutInfo.ordre;
+  };
 
   // Styles
   const styles = {
@@ -293,7 +316,6 @@ const GestionIncidentsPro = () => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(i =>
-        i.titre?.toLowerCase().includes(query) ||
         i.description?.toLowerCase().includes(query) ||
         String(i.id).includes(query)
       );
@@ -307,12 +329,19 @@ const GestionIncidentsPro = () => {
   }, [incidents, searchQuery, statusFilter]);
 
   // Stats
-  const stats = useMemo(() => ({
-    total: incidents.length,
-    enCours: incidents.filter(i => i.statut === 'EN_COURS_DE_TRAITEMENT').length,
-    traites: incidents.filter(i => i.statut === 'TRAITE').length,
-    bloques: incidents.filter(i => i.statut === 'BLOQUE').length
-  }), [incidents]);
+  const stats = useMemo(() => {
+    const total = incidents.length;
+    const enCours = incidents.filter(i => i.statut === 'EN_COURS_DE_TRAITEMENT').length;
+    const traites = incidents.filter(i => i.statut === 'TRAITE').length;
+    const bloques = incidents.filter(i => i.statut === 'BLOQUE').length;
+    const rediriges = incidents.filter(i => i.statut === 'REDIRIGE').length;
+    // Autres = VALIDE + PRIS_EN_COMPTE
+    const autres = incidents.filter(i =>
+      i.statut === 'VALIDE' || i.statut === 'PRIS_EN_COMPTE'
+    ).length;
+
+    return { total, enCours, traites, bloques, rediriges, autres };
+  }, [incidents]);
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -360,33 +389,33 @@ const GestionIncidentsPro = () => {
 
   const handleStatusUpdate = async () => {
     if (!selectedIncident || !newStatus) {
-      alert('Veuillez sélectionner un statut');
+      showToast('❌ Veuillez sélectionner un statut', 'error', 3000);
       return;
     }
 
     // Vérifier si un commentaire est requis
     if ((newStatus === 'TRAITE' || newStatus === 'BLOQUE') && !statusComment.trim()) {
-      alert('Un commentaire est obligatoire pour ce statut');
+      showToast('❌ Un commentaire est obligatoire pour ce statut', 'error', 5000);
       return;
     }
 
     setSubmitting(true);
     try {
       // Appel API pour mettre à jour le statut
-      await incidentsAPI.updateStatus(selectedIncident.id, {
+      await professionnelAPI.updateStatus(selectedIncident.id, {
         statut: newStatus,
         commentaire: statusComment
       });
 
-      alert('✅ Statut mis à jour avec succès !');
-      await fetchIncidents();
+      showToast(`✅ Statut mis à jour avec succès vers "${getStatusLabel(newStatus)}"`, 'success', 5000);
+      await fetchIncidents(); // Recharger la liste
       setShowStatusModal(false);
       setSelectedIncident(null);
       setNewStatus('');
       setStatusComment('');
     } catch (err) {
       console.error('Erreur:', err);
-      alert('❌ Erreur lors de la mise à jour: ' + (err.message || 'Erreur inconnue'));
+      showToast(`❌ Erreur lors de la mise à jour: ${err.message || 'Erreur inconnue'} `, 'error', 5000);
     } finally {
       setSubmitting(false);
     }
@@ -475,6 +504,15 @@ const GestionIncidentsPro = () => {
           <div>
             <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#1e293b' }}>{stats.bloques}</div>
             <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Bloqués</div>
+          </div>
+        </div>
+        <div style={styles.statCard}>
+          <div style={{ ...styles.statIcon, background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' }}>
+            <TrendingUp size={24} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#1e293b' }}>{stats.autres}</div>
+            <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Autres</div>
           </div>
         </div>
       </div>
@@ -575,7 +613,7 @@ const GestionIncidentsPro = () => {
                       </span>
                     </div>
                     <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1e293b', fontWeight: '600' }}>
-                      {incident.titre || incident.typeIncident || 'Incident'}
+                      {incident.typeIncident || 'Incident'}
                     </h3>
                   </div>
                   <span style={{
@@ -586,7 +624,7 @@ const GestionIncidentsPro = () => {
                     borderRadius: '20px',
                     fontSize: '0.75rem',
                     fontWeight: '600',
-                    background: `${secteur.color}20`,
+                    background: `${secteur.color} 20`,
                     color: secteur.color
                   }}>
                     {secteur.nom}
@@ -692,7 +730,7 @@ const GestionIncidentsPro = () => {
                 marginBottom: '24px'
               }}>
                 <h4 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>
-                  {selectedIncident.titre || selectedIncident.typeIncident}
+                  {selectedIncident.typeIncident}
                 </h4>
                 <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>
                   {selectedIncident.description}
@@ -722,27 +760,46 @@ const GestionIncidentsPro = () => {
                   {STATUTS_PRO.map((statut) => {
                     const Icon = statut.icon;
                     const isSelected = newStatus === statut.value;
+                    const isDisabled = isStatusDisabled(statut.value, selectedIncident.statut);
+
                     return (
                       <div
                         key={statut.value}
-                        onClick={() => setNewStatus(statut.value)}
+                        onClick={() => !isDisabled && setNewStatus(statut.value)}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           gap: '12px',
                           padding: '14px 16px',
                           borderRadius: '12px',
-                          border: `2px solid ${isSelected ? statut.color : '#e2e8f0'}`,
-                          background: isSelected ? `${statut.color}10` : '#fff',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease'
+                          border: `2px solid ${isSelected ? statut.color : (isDisabled ? '#e2e8f0' : '#e2e8f0')}`,
+                          background: isSelected ? `${statut.color}10` : (isDisabled ? '#f8fafc' : '#fff'),
+                          cursor: isDisabled ? 'not-allowed' : 'pointer',
+                          opacity: isDisabled ? 0.5 : 1,
+                          transition: 'all 0.2s ease',
+                          position: 'relative'
                         }}
                       >
+                        {isDisabled && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            background: '#ef4444',
+                            color: '#fff',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.7rem',
+                            fontWeight: '600'
+                          }}>
+                            ⛔ Bloqué
+                          </div>
+                        )}
                         <div style={{
                           width: '36px',
                           height: '36px',
                           borderRadius: '10px',
-                          background: statut.color,
+                          background: isDisabled ? '#cbd5e1' : statut.color,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center'
@@ -750,14 +807,14 @@ const GestionIncidentsPro = () => {
                           <Icon size={18} color="#fff" />
                         </div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: '600', color: '#1e293b', marginBottom: '2px' }}>
+                          <div style={{ fontWeight: '600', color: isDisabled ? '#94a3b8' : '#1e293b', marginBottom: '2px' }}>
                             {statut.label}
                           </div>
-                          <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                          <div style={{ fontSize: '0.8rem', color: isDisabled ? '#cbd5e1' : '#64748b' }}>
                             {statut.description}
                           </div>
                         </div>
-                        {isSelected && (
+                        {isSelected && !isDisabled && (
                           <CheckCircle size={20} color={statut.color} />
                         )}
                       </div>
@@ -906,7 +963,7 @@ const GestionIncidentsPro = () => {
             </div>
             <div style={{ padding: '24px' }}>
               <h2 style={{ margin: '0 0 16px 0', color: '#1e293b' }}>
-                {selectedIncident.titre || selectedIncident.typeIncident || 'Incident'}
+                {selectedIncident.typeIncident || 'Incident'}
               </h2>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
@@ -1001,7 +1058,7 @@ const GestionIncidentsPro = () => {
                 <button
                   onClick={() => {
                     // Navigate to map with incident (zoom to level 18)
-                    navigate(`/carte?incident=${selectedIncident.id}`);
+                    navigate(`/ carte ? incident = ${selectedIncident.id} `);
                   }}
                   style={{
                     ...styles.actionBtn,
@@ -1033,11 +1090,11 @@ const GestionIncidentsPro = () => {
       )}
 
       <style>{`
-        @keyframes spin {
+@keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
-        }
-      `}</style>
+}
+`}</style>
     </div>
   );
 };

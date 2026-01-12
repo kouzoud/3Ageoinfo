@@ -373,14 +373,14 @@ const ProfessionnelDashboard = () => {
                       )}
                     </div>
 
-                    {/* Titre */}
+                    {/* Type */}
                     <h3 style={{
                       fontSize: '1.125rem',
                       fontWeight: '700',
                       color: '#1e293b',
                       margin: '0 0 8px 0'
                     }}>
-                      {incident.titre}
+                      {incident.typeIncident}
                     </h3>
 
                     {/* Description */}
@@ -510,7 +510,7 @@ const TraitementModal = ({
 
           {/* Détails de l'incident */}
           <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-            <h4 className="font-semibold text-gray-900 mb-2">{incident?.titre}</h4>
+            <h4 className="font-semibold text-gray-900 mb-2">{incident?.typeIncident}</h4>
             <p className="text-sm text-gray-600 mb-3">{incident?.description}</p>
             <div className="text-sm text-gray-500">
               Secteur : {incident?.secteur?.nom} | Type : {incident?.typeIncident}

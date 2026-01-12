@@ -10,14 +10,10 @@ import {
   XCircle,
   AlertCircle,
   Users,
-  Eye,
-  ThumbsUp,
-  ThumbsDown,
-  X,
-  UserPlus,
-  Edit,
-  Trash2
+  Eye, X, Clock, MapPin, User, Calendar, AlertTriangle, ExternalLink,
+  ThumbsUp, ThumbsDown, UserPlus, Edit, Trash2
 } from 'lucide-react';
+import { showToast } from '../components/Toast';
 
 /**
  * Page d'administration
@@ -94,7 +90,7 @@ const AdminDashboard = () => {
       }
     } catch (err) {
       console.error('Erreur de chargement:', err);
-      setError(err.message || 'Erreur lors du chargement des données');
+      showToast(`❌ Erreur lors du chargement des données: ${err.message || 'Erreur inconnue'}`, 'error', 5000);
     } finally {
       setLoading(false);
     }
@@ -106,11 +102,11 @@ const AdminDashboard = () => {
   const handleValider = async (incidentId) => {
     try {
       await adminAPI.validerIncident(incidentId);
-      alert('✅ Incident validé et publié avec succès !');
-      loadData(); // Recharger la liste
+      showToast('✅ Incident validé et publié avec succès !', 'success', 5000);
+      await loadData(); // Recharger la liste
     } catch (err) {
       console.error('Erreur validation:', err);
-      alert('❌ Erreur lors de la validation : ' + err.message);
+      showToast(`❌ Erreur lors de la validation : ${err.message || 'Erreur inconnue'}`, 'error', 5000);
     }
   };
 
@@ -141,12 +137,12 @@ const AdminDashboard = () => {
 
     // Validation du motif
     if (!motifRejet.trim()) {
-      alert('⚠️ Le motif de rejet est obligatoire !');
+      showToast('⚠️ Le motif de rejet est obligatoire !', 'warning', 3000);
       return;
     }
 
     if (motifRejet.trim().length < 10) {
-      alert('⚠️ Le motif de rejet doit contenir au moins 10 caractères !');
+      showToast('⚠️ Le motif de rejet doit contenir au moins 10 caractères !', 'warning', 3000);
       return;
     }
 
@@ -159,7 +155,7 @@ const AdminDashboard = () => {
       await adminAPI.rejeterIncident(selectedIncident.id, motifRejet);
 
       console.log('✅ Incident rejeté avec succès');
-      alert('✅ Incident rejeté avec succès !');
+      showToast('✅ Incident rejeté avec succès !', 'success', 5000);
 
       // Fermer le modal et réinitialiser
       setIsRejetModalOpen(false);
@@ -167,10 +163,10 @@ const AdminDashboard = () => {
       setMotifRejet('');
 
       // Recharger les données
-      loadData();
+      await loadData();
     } catch (err) {
       console.error('❌ Erreur lors du rejet:', err);
-      alert('❌ Erreur lors du rejet : ' + (err.message || 'Erreur inconnue'));
+      showToast(`❌ Erreur lors du rejet : ${err.message || 'Erreur inconnue'}`, 'error', 5000);
     }
   };
 
@@ -187,7 +183,7 @@ const AdminDashboard = () => {
         setSecteurs(secs);
       } catch (err) {
         console.error('❌ Erreur chargement secteurs:', err);
-        alert('Erreur lors du chargement des secteurs: ' + err.message);
+        showToast(`❌ Erreur lors du chargement des secteurs: ${err.message || 'Erreur inconnue'}`, 'error', 5000);
         return;
       }
     }
@@ -226,12 +222,12 @@ const AdminDashboard = () => {
 
     // Validation
     if (!professionnelForm.nom || !professionnelForm.email) {
-      alert('⚠️ Nom et email sont obligatoires !');
+      showToast('⚠️ Nom et email sont obligatoires !', 'warning', 3000);
       return;
     }
 
     if (!editingProfessionnel && !professionnelForm.motDePasse) {
-      alert('⚠️ Le mot de passe est obligatoire pour un nouveau professionnel !');
+      showToast('⚠️ Le mot de passe est obligatoire pour un nouveau professionnel !', 'warning', 3000);
       return;
     }
 
@@ -243,20 +239,20 @@ const AdminDashboard = () => {
           delete dataToUpdate.motDePasse; // Ne pas envoyer le mot de passe vide
         }
         await adminAPI.updateProfessionnel(editingProfessionnel.id, dataToUpdate);
-        alert('✅ Professionnel modifié avec succès !');
+        showToast('✅ Professionnel modifié avec succès !', 'success', 5000);
       } else {
         // Création
         console.log('📤 Données envoyées pour création:', JSON.stringify(professionnelForm, null, 2));
         await adminAPI.createProfessionnel(professionnelForm);
-        alert('✅ Professionnel créé avec succès !');
+        showToast('✅ Professionnel créé avec succès !', 'success', 5000);
       }
 
       setIsProfessionnelModalOpen(false);
       setEditingProfessionnel(null);
-      loadData();
+      await loadData();
     } catch (err) {
       console.error('Erreur sauvegarde professionnel:', err);
-      alert('❌ Erreur : ' + err.message);
+      showToast(`❌ Erreur lors de la sauvegarde du professionnel : ${err.message || 'Erreur inconnue'}`, 'error', 5000);
     }
   };
 
@@ -270,21 +266,13 @@ const AdminDashboard = () => {
 
     try {
       await adminAPI.deleteProfessionnel(proId);
-      alert('✅ Professionnel supprimé avec succès !');
-      loadData();
+      showToast('✅ Professionnel supprimé avec succès !', 'success', 5000);
+      await loadData();
     } catch (err) {
       console.error('Erreur suppression:', err);
-      alert('❌ Erreur : ' + err.message);
+      showToast(`❌ Erreur : ${err.message || 'Erreur inconnue'}`, 'error', 5000);
     }
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <LoadingSpinner />
-      </div>
-    );
-  }
 
   return (
     <div style={{
@@ -731,8 +719,8 @@ const IncidentsTab = ({ incidents, onValider, onRejeter, onDetails }) => {
                 </span>
               </div>
 
-              {/* Titre */}
-              <h3 style={styles.cardTitle}>{incident.titre}</h3>
+              {/* Type Incident */}
+              <h3 style={styles.cardTitle}>{incident.typeIncident}</h3>
 
               {/* Description */}
               <p style={styles.cardDescription}>
@@ -789,6 +777,9 @@ const IncidentsTab = ({ incidents, onValider, onRejeter, onDetails }) => {
                   <button
                     style={styles.rejectBtn}
                     onClick={(e) => {
+                      console.log('📊 Incident data:', incident);
+                      console.log('📊 Secteur:', incident.secteur);
+                      console.log('📊 SecteurNom:', incident.secteurNom);
                       e.stopPropagation();
                       onRejeter(incident);
                     }}
@@ -1242,7 +1233,7 @@ const RejetModal = ({ incident, motif, onMotifChange, onConfirm, onClose }) => {
           {/* Résumé de l'incident */}
           <div style={{ marginBottom: '20px', padding: '16px', background: '#fef2f2', borderRadius: '12px', border: '1px solid #fee2e2' }}>
             <h4 style={{ fontSize: '0.95rem', fontWeight: '600', color: '#1e293b', marginBottom: '8px' }}>
-              {incident?.titre || 'Incident'}
+              {incident?.typeIncident || 'Incident'}
             </h4>
             <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>
               Secteur: {incident?.secteurNom || 'Non défini'}
@@ -1533,6 +1524,29 @@ const DetailsModal = ({ incident, onClose, onValider, onRejeter }) => {
 
         {/* Corps du modal */}
         <div style={modalStyles.body}>
+          {/* Photo en premier */}
+          {incident.photoUrl && (
+            <div style={modalStyles.section}>
+              <h3 style={modalStyles.sectionTitle}>
+                📷 Photo de l'incident
+              </h3>
+              <div style={{ textAlign: 'center' }}>
+                <img
+                  src={incident.photoUrl.startsWith('http')
+                    ? incident.photoUrl
+                    : `http://localhost:8085${incident.photoUrl}`}
+                  alt="Photo de l'incident"
+                  style={modalStyles.photo}
+                  onError={(e) => {
+                    console.error('Erreur chargement image:', incident.photoUrl);
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.parentElement.innerHTML = '<p style="color: #ef4444;">❌ Image non disponible</p>';
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Informations principales */}
           <div style={modalStyles.section}>
             <h3 style={modalStyles.sectionTitle}>
@@ -1540,9 +1554,9 @@ const DetailsModal = ({ incident, onClose, onValider, onRejeter }) => {
             </h3>
 
             <div style={modalStyles.detailGroup}>
-              <label style={modalStyles.label}>Titre</label>
+              <label style={modalStyles.label}>Type</label>
               <p style={{ ...modalStyles.value, fontSize: '1.1rem', fontWeight: '700' }}>
-                {incident.titre}
+                {incident.typeIncident}
               </p>
             </div>
 
@@ -1555,9 +1569,9 @@ const DetailsModal = ({ incident, onClose, onValider, onRejeter }) => {
 
             <div style={modalStyles.detailRow}>
               <div style={modalStyles.detailGroup}>
-                <label style={modalStyles.label}>Type d'incident</label>
+                <label style={modalStyles.label}>Secteur</label>
                 <p style={modalStyles.value}>
-                  {incident.typeIncident || 'Non spécifié'}
+                  {incident.secteurNom || incident.secteur?.nom || 'Non renseigné'}
                 </p>
               </div>
 
@@ -1577,13 +1591,6 @@ const DetailsModal = ({ incident, onClose, onValider, onRejeter }) => {
 
 
             <div style={modalStyles.detailRow}>
-              <div style={modalStyles.detailGroup}>
-                <label style={modalStyles.label}>Secteur</label>
-                <p style={modalStyles.value}>
-                  {incident.secteurNom || incident.secteur?.nomSecteur || 'Non spécifié'}
-                </p>
-              </div>
-
               <div style={modalStyles.detailGroup}>
                 <label style={modalStyles.label}>Province</label>
                 <p style={modalStyles.value}>
@@ -1624,62 +1631,6 @@ const DetailsModal = ({ incident, onClose, onValider, onRejeter }) => {
                   </a>
                 </div>
               </>
-            )}
-          </div>
-
-          {/* Photo */}
-          {incident.photoUrl && (
-            <div style={modalStyles.section}>
-              <h3 style={modalStyles.sectionTitle}>
-                📷 Photo de l'incident
-              </h3>
-              <div style={{ textAlign: 'center' }}>
-                <img
-                  src={incident.photoUrl.startsWith('http')
-                    ? incident.photoUrl
-                    : `http://localhost:8085${incident.photoUrl}`}
-                  alt="Photo de l'incident"
-                  style={modalStyles.photo}
-                  onError={(e) => {
-                    console.error('Erreur chargement image:', incident.photoUrl);
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.parentElement.innerHTML = '<p style="color: #ef4444;">❌ Image non disponible</p>';
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Informations techniques */}
-          <div style={modalStyles.section}>
-            <h3 style={modalStyles.sectionTitle}>
-              🔧 Informations techniques
-            </h3>
-
-            <div style={modalStyles.detailRow}>
-              <div style={modalStyles.detailGroup}>
-                <label style={modalStyles.label}>Date de création</label>
-                <p style={modalStyles.value}>
-                  {incident.dateDeclaration ? formatDate(incident.dateDeclaration) :
-                    incident.dateCreation ? new Date(incident.dateCreation).toLocaleString('fr-FR') : 'N/A'}
-                </p>
-              </div>
-
-              <div style={modalStyles.detailGroup}>
-                <label style={modalStyles.label}>ID de l'incident</label>
-                <p style={{ ...modalStyles.value, fontFamily: 'monospace', color: '#3b82f6' }}>
-                  #{incident.id}
-                </p>
-              </div>
-            </div>
-
-            {incident.deviceId && (
-              <div style={modalStyles.detailGroup}>
-                <label style={modalStyles.label}>ID Appareil (UUID anonyme)</label>
-                <p style={{ ...modalStyles.value, fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                  {incident.deviceId}
-                </p>
-              </div>
             )}
           </div>
         </div>

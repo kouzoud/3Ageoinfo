@@ -186,6 +186,56 @@
 }
 
 /* ====================================
+   Section Filtrée
+   ==================================== */
+.dashboard-filtered-section {
+    background: rgba(255, 255, 255, 0.5);
+    border: 2px solid #dbeafe;
+    border-radius: var(--dash-radius-xl);
+    padding: 20px;
+    margin-bottom: 32px;
+    position: relative;
+    box-shadow: 0 4px 20px rgba(37, 99, 235, 0.08);
+}
+
+.dashboard-filtered-section::before {
+    content: '🔍 Données filtrées par période';
+    position: absolute;
+    top: -12px;
+    left: 20px;
+    background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+    color: white;
+    padding: 4px 16px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+
+.dashboard-filtered-section .dashboard-filters {
+    margin-bottom: 20px;
+}
+
+.dashboard-filtered-section .dashboard-stats-grid {
+    margin-bottom: 20px;
+}
+
+.dashboard-filtered-section .dashboard-charts-grid {
+    margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+    .dashboard-filtered-section {
+        padding: 16px;
+    }
+
+    .dashboard-filtered-section::before {
+        font-size: 0.7rem;
+        padding: 3px 12px;
+    }
+}
+
+/* ====================================
    États de Chargement et Erreur
    ==================================== */
 .dashboard-loading {

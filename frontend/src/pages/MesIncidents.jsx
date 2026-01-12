@@ -53,15 +53,28 @@ const MesIncidents = () => {
 
     // Récupérer les incidents du citoyen
     const fetchMyIncidents = async () => {
-        if (!deviceId) return;
-
         try {
             setError('');
-            const data = await publicAPI.getIncidentsByDeviceId(deviceId);
-            setIncidents(data);
+
+            // Priorité 1 : Récupérer par email si disponible
+            const email = localStorage.getItem('citizenEmail');
+
+            if (email) {
+                console.log('📧 Récupération par email:', email);
+                const data = await publicAPI.getIncidentsByEmail(email);
+                setIncidents(data);
+                console.log(`✅ ${data.length} incidents récupérés par email`);
+            }
+            // Priorité 2 : Récupérer par deviceId (mode anonyme)
+            else if (deviceId) {
+                console.log('🔑 Récupération par UUID:', deviceId);
+                const data = await publicAPI.getIncidentsByDeviceId(deviceId);
+                setIncidents(data);
+                console.log(`✅ ${data.length} incidents récupérés par UUID`);
+            }
 
             // Extraire les secteurs uniques
-            const uniqueSecteurs = [...new Set(data.map(inc => inc.secteurNom).filter(Boolean))];
+            const uniqueSecteurs = [...new Set(incidents.map(inc => inc.secteurNom).filter(Boolean))];
             setSecteurs(uniqueSecteurs.sort());
         } catch (err) {
             console.error('Erreur récupération incidents:', err);
@@ -73,7 +86,9 @@ const MesIncidents = () => {
     };
 
     useEffect(() => {
-        if (deviceId) {
+        const email = localStorage.getItem('citizenEmail');
+        // Déclencher si email OU deviceId existe
+        if (email || deviceId) {
             fetchMyIncidents();
         }
     }, [deviceId]);
@@ -232,98 +247,8 @@ const MesIncidents = () => {
                             Consultez l'état de tous vos signalements en temps réel
                         </p>
 
-                        {/* Affichage de l'UUID */}
-                        <div className="card" style={{
-                            marginTop: '1.5rem',
-                            padding: '1.25rem',
-                            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(96, 165, 250, 0.1) 100%)',
-                            border: '1.5px solid rgba(96, 165, 250, 0.35)',
-                            boxShadow: '0 4px 16px rgba(59, 130, 246, 0.15)',
-                            backdropFilter: 'blur(8px)'
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-                                <Info size={20} style={{ color: '#3b82f6', flexShrink: 0, marginTop: '0.125rem' }} />
-                                <div style={{ flex: 1 }}>
-                                    <h3 style={{
-                                        fontSize: '0.875rem',
-                                        fontWeight: '700',
-                                        marginBottom: '0.5rem',
-                                        color: 'rgba(255, 255, 255, 0.9)',
-                                        textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)'
-                                    }}>
-                                        🔑 Votre identifiant de suivi
-                                    </h3>
-                                    <div style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.75rem',
-                                        flexWrap: 'wrap'
-                                    }}>
-                                        <code style={{
-                                            padding: '0.5rem 0.75rem',
-                                            background: 'rgba(15, 23, 42, 0.7)',
-                                            border: '1px solid rgba(96, 165, 250, 0.3)',
-                                            borderRadius: '6px',
-                                            fontSize: '0.875rem',
-                                            fontFamily: 'monospace',
-                                            color: 'rgba(147, 197, 253, 0.95)',
-                                            boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.3)'
-                                        }}>
-                                            {deviceId}
-                                        </code>
-                                        <button
-                                            onClick={copyUUID}
-                                            style={{
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: '0.375rem',
-                                                padding: '0.5rem 1rem',
-                                                background: copied ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                                                color: 'white',
-                                                border: 'none',
-                                                borderRadius: '8px',
-                                                fontSize: '0.875rem',
-                                                fontWeight: '600',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                boxShadow: copied ? '0 4px 16px rgba(16, 185, 129, 0.3)' : '0 4px 16px rgba(59, 130, 246, 0.3)'
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                if (!copied) {
-                                                    e.currentTarget.style.transform = 'scale(1.05)';
-                                                    e.currentTarget.style.boxShadow = '0 6px 24px rgba(59, 130, 246, 0.5)';
-                                                }
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.currentTarget.style.transform = 'scale(1)';
-                                                e.currentTarget.style.boxShadow = copied ? '0 4px 16px rgba(16, 185, 129, 0.3)' : '0 4px 16px rgba(59, 130, 246, 0.3)';
-                                            }}
-                                        >
-                                            {copied ? (
-                                                <>
-                                                    <Check size={16} />
-                                                    Copié !
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Copy size={16} />
-                                                    Copier
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
-                                    <p style={{
-                                        marginTop: '0.75rem',
-                                        fontSize: '0.75rem',
-                                        color: 'rgba(226, 232, 240, 0.75)',
-                                        lineHeight: '1.5'
-                                    }}>
-                                        ⚠️ <strong>Conservez précieusement cet identifiant.</strong> Il vous permettra de retrouver vos incidents
-                                        depuis un autre appareil ou après un changement de navigateur.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
+                        {/* Section UUID supprimée - Email recovery est maintenant la méthode principale */}
+
 
                         {/* Bouton rafraîchir */}
                         <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
@@ -711,7 +636,7 @@ const MesIncidents = () => {
                                                 color: 'rgba(255, 255, 255, 0.95)',
                                                 textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)'
                                             }}>
-                                                {incident.titre}
+                                                {incident.typeIncident}
                                             </h3>
                                             <div style={{
                                                 display: 'flex',
