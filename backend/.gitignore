@@ -38,3 +38,12 @@ application-local.properties
 # Logs
 logs/
 spring.log
+
+# Certificats SSL et keystores
+*.p12
+*.jks
+*.keystore
+*.truststore
+*.pem
+*.key
+*.crt

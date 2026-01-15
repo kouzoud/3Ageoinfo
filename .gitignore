@@ -1,0 +1,44 @@
+# === SÉCURITÉ - NE JAMAIS COMMIT ===
+# Certificats SSL et clés privées
+*.pem
+*.p12
+*.key
+*.crt
+*.cer
+*.pfx
+keystore.*
+truststore.*
+rootCA.*
+
+# Variables d'environnement
+.env
+.env.*
+!.env.example
+
+# === FICHIERS SYSTÈME ===
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# === EXÉCUTABLES ET BINAIRES ===
+*.exe
+*.dll
+*.so
+*.dylib
+*.zip
+*.tar.gz
+*.rar
+
+# === UPLOADS ET DONNÉES ===
+uploads/
+temp/
+tmp/
+
+# === IDE ===
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
