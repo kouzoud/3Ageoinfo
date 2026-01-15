@@ -175,9 +175,73 @@ const DeclarerIncident = () => {
     if (message) setMessage('');
   };
 
-  // Fonction pour ouvrir la caméra directement (sans galerie)
+  // Fonction pour ouvrir la caméra - avec fallback pour HTTP
   const openCamera = async () => {
     try {
+      const isSecureContext = window.isSecureContext;
+      const hasMediaDevices = navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+
+      // Si HTTP (non-HTTPS) ou API non supportée, utiliser input file
+      if (!isSecureContext || !hasMediaDevices) {
+        // Créer un input file temporaire avec capture="camera"
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.capture = 'environment'; // Ouvre la caméra directement sur mobile
+
+        input.onchange = async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          // Vérifier la taille
+          if (file.size > 5 * 1024 * 1024) {
+            setFieldErrors(prev => ({ ...prev, photo: 'La photo ne doit pas dépasser 5 MB' }));
+            return;
+          }
+
+          // Capturer le GPS au moment de la prise de photo
+          try {
+            const gpsData = await captureGPSAtPhotoMoment();
+            setPhotoMetadata(gpsData);
+            console.log('📍 GPS capturé:', gpsData);
+          } catch (gpsError) {
+            console.error('Erreur GPS:', gpsError);
+
+            // Ne pas bloquer - continuer sans GPS avec valeur par défaut
+            alert('⚠️ GPS non disponible\n\nLa localisation ne peut pas être capturée sur HTTP.\n\nVotre photo sera enregistrée mais sans coordonnées GPS précises.');
+
+            // Utiliser coordonnées par défaut (centre du Maroc)
+            setPhotoMetadata({
+              latitude: 31.7917, // Marrakech (centre approximatif)
+              longitude: -7.0926,
+              accuracy: 999999, // Précision très faible = GPS non disponible
+              timestamp: Date.now()
+            });
+
+            setFieldErrors(prev => ({ ...prev, photo: '⚠️ Photo enregistrée sans GPS' }));
+          }
+
+          // Stocker la photo
+          setPhoto(file);
+
+          // Créer une prévisualisation
+          const reader = new FileReader();
+          reader.onload = (e) => setPhotoPreview(e.target.result);
+          reader.readAsDataURL(file);
+
+          // Effacer les erreurs
+          setFieldErrors(prev => ({ ...prev, photo: undefined }));
+          if (error) setError('');
+
+          console.log('✅ Photo + GPS capturés via input file');
+        };
+
+        // Déclencher le sélecteur de fichier
+        input.click();
+        return;
+      }
+
+      // Code original pour HTTPS (getUserMedia)
       // Vérifier si l'API est supportée
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setFieldErrors(prev => ({ ...prev, photo: 'Votre appareil ne supporte pas la capture photo' }));
@@ -400,7 +464,7 @@ const DeclarerIncident = () => {
 
         // Désactiver le bouton pendant le traitement
         captureBtn.disabled = true;
-        captureBtn.textContent = '� Capture en cours...';
+        captureBtn.textContent = '⏳ Capture en cours...';
         captureBtn.style.opacity = '0.7';
 
         try {
@@ -547,12 +611,12 @@ const DeclarerIncident = () => {
         }
       });
 
-      // Validation de la photo ET des données GPS (obligatoires)
+      // Validation de la photo (obligatoire) - GPS optionnel maintenant
       if (!photo) {
         allErrors.photo = 'La photo est obligatoire';
       }
       if (!photoMetadata) {
-        allErrors.photo = 'La localisation GPS est obligatoire. Veuillez prendre une photo.';
+        allErrors.photo = 'Erreur: métadonnées photo manquantes. Veuillez reprendre la photo.';
       }
 
       if (Object.keys(allErrors).length > 0) {

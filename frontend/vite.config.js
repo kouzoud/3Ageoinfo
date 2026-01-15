@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'fs'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -22,6 +23,12 @@ export default defineConfig({
         id: '/',
         categories: ['utilities', 'productivity'],
         icons: [
+          {
+            src: '/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any'  // Changed from maskable to any - fixes invisible icon on Android
+          },
           {
             src: '/icon-192.png',
             sizes: '192x192',
@@ -111,12 +118,13 @@ export default defineConfig({
     })
   ],
   server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8085',
-        changeOrigin: true,
-        secure: false
-      }
-    }
+    host: '0.0.0.0', // Listen on all network interfaces (allows mobile access)
+    port: 5173,
+    strictPort: true
+    // HTTPS local désactivé - utilisation de ngrok pour HTTPS
+    // https: {
+    //   key: fs.readFileSync('./localhost-key.pem'),
+    //   cert: fs.readFileSync('./localhost-cert.pem')
+    // }
   }
 })

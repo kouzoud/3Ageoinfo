@@ -74,11 +74,12 @@ const Home = () => {
 
   return (
     <div className="home-page">
-      {/* Background animé amélioré */}
+      {/* Background animé avec effet Nebula Wave */}
       <AnimatedBackground
-        enableParticles={true}
-        enableGradient={true}
-        enableBorder={false}
+        enableConnections={true}
+        enableMouseInteraction={true}
+        enableTrails={true}
+        connectionDistance={150}
       />
 
       {/* Hero Section - Design amélioré */}
