@@ -61,40 +61,23 @@ const Navbar = () => {
           <span className="brand-text">CityAlert</span>
         </Link>
 
-        {/* Bouton hamburger pour mobile */}
-        <button
-          className="navbar-toggle"
-          onClick={toggleMenu}
-          aria-label={isMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
-          aria-expanded={isMenuOpen}
-        >
-          {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
-        </button>
+        {/* Bouton hamburger pour mobile - masqué en mode PWA */}
+        {!isPWA && (
+          <button
+            className="navbar-toggle"
+            onClick={toggleMenu}
+            aria-label={isMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
+            aria-expanded={isMenuOpen}
+          >
+            {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
+          </button>
+        )}
 
         {/* Menu de navigation */}
         <ul className={`navbar-menu ${isMenuOpen ? 'open' : ''}`}>
           {isPWA ? (
-            /* 📱 MODE PWA - NAVIGATION CITOYENNE SIMPLIFIÉE */
-            <>
-              <li className="nav-highlight">
-                <Link
-                  to="/declarer-incident"
-                  className={`${isActive('/declarer-incident')} nav-pwa-primary`}
-                  onClick={closeMenu}
-                >
-                  📝 Déclarer un incident
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/mes-incidents"
-                  className={isActive('/mes-incidents')}
-                  onClick={closeMenu}
-                >
-                  📋 Mes Incidents
-                </Link>
-              </li>
-            </>
+            /* 📱 MODE PWA - Navbar du haut masquée, navigation via BottomNavBar */
+            null
           ) : (
             /* 🖥️ MODE DESKTOP - NAVIGATION COMPLÈTE */
             <>

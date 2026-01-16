@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, AlertCircle, Map, Plus, BarChart3 } from 'lucide-react';
+import { AlertCircle, Plus, MapPin } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 /**
@@ -20,22 +20,16 @@ const BottomNavBar = () => {
 
     return (
         <nav className="bottom-nav-bar">
+            {/* Mes Incidents */}
             <Link
-                to="/"
-                className={`bottom-nav-item ${isActive('/') ? 'active' : ''}`}
+                to="/mes-incidents"
+                className={`bottom-nav-item ${isActive('/mes-incidents') ? 'active' : ''}`}
             >
-                <Home size={22} />
-                <span>Accueil</span>
+                <AlertCircle size={22} />
+                <span>Mes Incidents</span>
             </Link>
 
-            <Link
-                to="/tableau-de-bord"
-                className={`bottom-nav-item ${isActive('/tableau-de-bord') ? 'active' : ''}`}
-            >
-                <BarChart3 size={22} />
-                <span>Stats</span>
-            </Link>
-
+            {/* Signaler - Bouton central principal */}
             {canDeclare && (
                 <Link
                     to="/declarer-incident"
@@ -48,20 +42,13 @@ const BottomNavBar = () => {
                 </Link>
             )}
 
+            {/* Ma Carte - Incidents du citoyen uniquement */}
             <Link
-                to="/incidents"
-                className={`bottom-nav-item ${isActive('/incidents') ? 'active' : ''}`}
+                to="/ma-carte"
+                className={`bottom-nav-item ${isActive('/ma-carte') ? 'active' : ''}`}
             >
-                <AlertCircle size={22} />
-                <span>Incidents</span>
-            </Link>
-
-            <Link
-                to="/carte"
-                className={`bottom-nav-item ${isActive('/carte') ? 'active' : ''}`}
-            >
-                <Map size={22} />
-                <span>Carte</span>
+                <MapPin size={22} />
+                <span>Ma Carte</span>
             </Link>
         </nav>
     );

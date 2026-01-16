@@ -753,148 +753,8 @@ const DeclarerIncident = () => {
 
           <form onSubmit={handleSubmit} className="card">
 
-            {/* Description */}
+            {/* 1. Photo - Camera Only (EN PREMIER) */}
             <div className="form-group enhanced">
-              <label htmlFor="description" className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FileText size={16} />
-                Description détaillée (optionnelle)
-              </label>
-              <textarea
-                id="description"
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                className={`form-textarea ${fieldErrors.description ? 'error' : formData.description.length >= 20 ? 'success' : ''}`}
-                rows="5"
-                placeholder={useMemo(() => {
-                  const secteur = secteurs.find(s => s.id == formData.secteurId);
-                  return secteur ? DESCRIPTION_EXEMPLES[secteur.nom] || '📝 Décrivez l\'incident...' : '📝 Décrivez l\'incident...';
-                }, [formData.secteurId, secteurs])}
-                maxLength="500"
-              />
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
-                {fieldErrors.description && (
-                  <span className="form-error-message" style={{ color: 'var(--danger-color)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                    <AlertCircle size={12} />
-                    {fieldErrors.description}
-                  </span>
-                )}
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: 'auto' }}>
-                  {formData.description.length}/500
-                </span>
-              </div>
-              <div className="form-help" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                <Info size={12} />
-                💡 Optionnelle mais recommandée - Plus vous êtes précis, plus l'intervention sera rapide
-              </div>
-            </div>
-
-            {/* Secteur */}
-            <div className="form-group enhanced">
-              <label htmlFor="secteurId" className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <MapIcon size={16} />
-                Secteur géographique *
-              </label>
-              <select
-                id="secteurId"
-                name="secteurId"
-                value={formData.secteurId}
-                onChange={handleChange}
-                className={`form-select ${fieldErrors.secteurId ? 'error' : formData.secteurId ? 'success' : ''}`}
-                required
-              >
-                <option value="">📍 Choisir votre secteur</option>
-                {secteurs.map(secteur => {
-                  // Mapper chaque secteur à son emoji approprié
-                  const getSecteurEmoji = (nom) => {
-                    const emojiMap = {
-                      'Infrastructure': '🏗️',
-                      'Environnement': '🌿',
-                      'Sécurité': '🚨',
-                      'Urbanisme': '🏙️',
-                      'Transport': '🚌',
-                      'Santé': '⚕️',
-                      'Services Publics': '💧'
-                    };
-                    return emojiMap[nom] || '🏘️';
-                  };
-
-                  return (
-                    <option key={secteur.id} value={secteur.id}>
-                      {getSecteurEmoji(secteur.nom)} {secteur.nom}
-                    </option>
-                  );
-                })}
-              </select>
-              {fieldErrors.secteurId && (
-                <span style={{ color: 'var(--danger-color)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
-                  <AlertCircle size={12} />
-                  {fieldErrors.secteurId}
-                </span>
-              )}
-              <div className="form-help" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                <Info size={12} />
-                Le secteur permet d'orienter votre signalement vers le service compétent
-              </div>
-            </div>
-
-            {/* Type d'incident */}
-            <div className="form-group enhanced">
-              <label htmlFor="typeIncident" className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Tag size={16} />
-                Catégorie d'incident *
-              </label>
-              <select
-                id="typeIncident"
-                name="typeIncident"
-                value={formData.typeIncident}
-                onChange={handleChange}
-                className={`form-select ${fieldErrors.typeIncident ? 'error' : formData.typeIncident ? 'success' : ''}`}
-                required
-              >
-                <option value="">🏷️ Sélectionner la catégorie</option>
-                {(() => {
-                  const secteur = secteurs.find(s => s.id == formData.secteurId);
-                  const allowedCategories = secteur ? (SECTEUR_CATEGORIES[secteur.nom] || ALL_CATEGORIES) : ALL_CATEGORIES;
-
-                  const categoryOptions = [
-                    { value: 'Voirie', label: '🛣️ Voirie (nids-de-poule, chaussée dégradée)' },
-                    { value: 'Éclairage public', label: '💡 Éclairage public (lampadaire défaillant)' },
-                    { value: 'Assainissement', label: '🚰 Assainissement (fuite, égout bouché)' },
-                    { value: 'Espaces verts', label: '🌳 Espaces verts (arbres dangereux, jardins)' },
-                    { value: 'Propreté', label: '🧹 Propreté urbaine (déchets, graffitis)' },
-                    { value: 'Sécurité', label: '🛡️ Sécurité publique (signalisation défaillante)' },
-                    { value: 'Transport', label: '🚌 Transport public (arrêt endommagé)' },
-                    { value: 'Autre', label: '❓ Autre incident urbain' }
-                  ];
-
-                  return categoryOptions
-                    .filter(cat => allowedCategories.includes(cat.value))
-                    .map(cat => <option key={cat.value} value={cat.value}>{cat.label}</option>);
-                })()}
-              </select>
-              {fieldErrors.typeIncident && (
-                <span style={{ color: 'var(--danger-color)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
-                  <AlertCircle size={12} />
-                  {fieldErrors.typeIncident}
-                </span>
-              )}
-              {formData.secteurId && (
-                <div className="form-help" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <Info size={12} />
-                  Catégories filtrées selon votre secteur
-                </div>
-              )}
-            </div>
-
-            {/* Province: Déterminée automatiquement par le backend via intersection spatiale GPS */}
-
-            {/* NOTE: Identifiant citoyen généré automatiquement (UUID) - invisible pour l'utilisateur */}
-
-            {/* NOTE: Géolocalisation automatique - capturée lors de l'envoi */}
-
-            {/* Photo - Camera Only */}
-            <div className="form-group enhanced" style={{ marginTop: '2rem' }}>
               <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                 <Camera size={16} />
                 Prendre une photo <span style={{ color: '#ef4444', marginLeft: '2px' }}>*</span>
@@ -1059,6 +919,140 @@ const DeclarerIncident = () => {
               <div className="form-help" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                 <Info size={12} />
                 📸 La photo ET la localisation GPS sont obligatoires
+              </div>
+            </div>
+
+            {/* 2. Secteur */}
+            <div className="form-group enhanced">
+              <label htmlFor="secteurId" className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <MapIcon size={16} />
+                Secteur géographique *
+              </label>
+              <select
+                id="secteurId"
+                name="secteurId"
+                value={formData.secteurId}
+                onChange={handleChange}
+                className={`form-select ${fieldErrors.secteurId ? 'error' : formData.secteurId ? 'success' : ''}`}
+                required
+              >
+                <option value="">📍 Choisir votre secteur</option>
+                {secteurs.map(secteur => {
+                  // Mapper chaque secteur à son emoji approprié
+                  const getSecteurEmoji = (nom) => {
+                    const emojiMap = {
+                      'Infrastructure': '🏗️',
+                      'Environnement': '🌿',
+                      'Sécurité': '🚨',
+                      'Urbanisme': '🏙️',
+                      'Transport': '🚌',
+                      'Santé': '⚕️',
+                      'Services Publics': '💧'
+                    };
+                    return emojiMap[nom] || '🏘️';
+                  };
+
+                  return (
+                    <option key={secteur.id} value={secteur.id}>
+                      {getSecteurEmoji(secteur.nom)} {secteur.nom}
+                    </option>
+                  );
+                })}
+              </select>
+              {fieldErrors.secteurId && (
+                <span style={{ color: 'var(--danger-color)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
+                  <AlertCircle size={12} />
+                  {fieldErrors.secteurId}
+                </span>
+              )}
+              <div className="form-help" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <Info size={12} />
+                Le secteur permet d'orienter votre signalement vers le service compétent
+              </div>
+            </div>
+
+            {/* 3. Type d'incident (Catégorie) */}
+            <div className="form-group enhanced">
+              <label htmlFor="typeIncident" className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Tag size={16} />
+                Catégorie d'incident *
+              </label>
+              <select
+                id="typeIncident"
+                name="typeIncident"
+                value={formData.typeIncident}
+                onChange={handleChange}
+                className={`form-select ${fieldErrors.typeIncident ? 'error' : formData.typeIncident ? 'success' : ''}`}
+                required
+              >
+                <option value="">🏷️ Sélectionner la catégorie</option>
+                {(() => {
+                  const secteur = secteurs.find(s => s.id == formData.secteurId);
+                  const allowedCategories = secteur ? (SECTEUR_CATEGORIES[secteur.nom] || ALL_CATEGORIES) : ALL_CATEGORIES;
+
+                  const categoryOptions = [
+                    { value: 'Voirie', label: '🛣️ Voirie (nids-de-poule, chaussée dégradée)' },
+                    { value: 'Éclairage public', label: '💡 Éclairage public (lampadaire défaillant)' },
+                    { value: 'Assainissement', label: '🚰 Assainissement (fuite, égout bouché)' },
+                    { value: 'Espaces verts', label: '🌳 Espaces verts (arbres dangereux, jardins)' },
+                    { value: 'Propreté', label: '🧹 Propreté urbaine (déchets, graffitis)' },
+                    { value: 'Sécurité', label: '🛡️ Sécurité publique (signalisation défaillante)' },
+                    { value: 'Transport', label: '🚌 Transport public (arrêt endommagé)' },
+                    { value: 'Autre', label: '❓ Autre incident urbain' }
+                  ];
+
+                  return categoryOptions
+                    .filter(cat => allowedCategories.includes(cat.value))
+                    .map(cat => <option key={cat.value} value={cat.value}>{cat.label}</option>);
+                })()}
+              </select>
+              {fieldErrors.typeIncident && (
+                <span style={{ color: 'var(--danger-color)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
+                  <AlertCircle size={12} />
+                  {fieldErrors.typeIncident}
+                </span>
+              )}
+              {formData.secteurId && (
+                <div className="form-help" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <Info size={12} />
+                  Catégories filtrées selon votre secteur
+                </div>
+              )}
+            </div>
+
+            {/* 4. Description (EN DERNIER) */}
+            <div className="form-group enhanced">
+              <label htmlFor="description" className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <FileText size={16} />
+                Description détaillée (optionnelle)
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                className={`form-textarea ${fieldErrors.description ? 'error' : formData.description.length >= 20 ? 'success' : ''}`}
+                rows="5"
+                placeholder={useMemo(() => {
+                  const secteur = secteurs.find(s => s.id == formData.secteurId);
+                  return secteur ? DESCRIPTION_EXEMPLES[secteur.nom] || '📝 Décrivez l\'incident...' : '📝 Décrivez l\'incident...';
+                }, [formData.secteurId, secteurs])}
+                maxLength="500"
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
+                {fieldErrors.description && (
+                  <span className="form-error-message" style={{ color: 'var(--danger-color)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <AlertCircle size={12} />
+                    {fieldErrors.description}
+                  </span>
+                )}
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: 'auto' }}>
+                  {formData.description.length}/500
+                </span>
+              </div>
+              <div className="form-help" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <Info size={12} />
+                💡 Optionnelle mais recommandée - Plus vous êtes précis, plus l'intervention sera rapide
               </div>
             </div>
 

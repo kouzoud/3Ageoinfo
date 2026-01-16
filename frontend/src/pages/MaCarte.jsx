@@ -1,0 +1,498 @@
+import { useState, useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapPin, RefreshCw, AlertCircle, Eye, Navigation, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import { useCitizenDeviceId } from '../hooks/useCitizenDeviceId';
+import { publicAPI } from '../services/api';
+import PWAGuard from '../components/PWAGuard';
+
+// Création d'icônes personnalisées pour les incidents
+const createCustomIcon = (color, symbol) => {
+  return L.divIcon({
+    html: `
+      <div style="
+        background-color: ${color};
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: 3px solid white;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 18px;
+        color: white;
+        cursor: pointer;
+        position: relative;
+      ">
+        ${symbol}
+        <div style="
+          position: absolute;
+          bottom: -10px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 0;
+          height: 0;
+          border-left: 8px solid transparent;
+          border-right: 8px solid transparent;
+          border-top: 10px solid ${color};
+        "></div>
+      </div>
+    `,
+    className: 'custom-incident-marker',
+    iconSize: [36, 46],
+    iconAnchor: [18, 46],
+    popupAnchor: [0, -46]
+  });
+};
+
+// Icônes par statut d'incident
+const getIncidentIcon = (typeIncident, statut) => {
+  const statutColors = {
+    'REDIGE': '#6b7280',           // Gris
+    'PRISE_EN_COMPTE': '#6366f1',  // Indigo
+    'VALIDE': '#3b82f6',           // Bleu
+    'EN_COURS_DE_TRAITEMENT': '#f59e0b', // Orange
+    'TRAITE': '#10b981',           // Vert
+    'REJETE': '#ef4444',           // Rouge
+    'BLOQUE': '#dc2626'            // Rouge foncé
+  };
+
+  const typeSymbols = {
+    'Infrastructure': '🏗️',
+    'Voirie': '🛣️',
+    'Environnement': '🌱',
+    'Sécurité': '🚨',
+    'Services Publics': '🏛️',
+    'Transport': '🚌',
+    'Éclairage public': '💡',
+    'Assainissement': '🚰',
+    'Espaces verts': '🌳',
+    'Propreté': '🧹',
+    'Autre': '⚠️',
+    'default': '📍'
+  };
+
+  const color = statutColors[statut] || '#6b7280';
+  const symbol = typeSymbols[typeIncident] || typeSymbols['default'];
+
+  return createCustomIcon(color, symbol);
+};
+
+// Composant pour ajuster la vue de la carte
+const MapUpdater = ({ incidents, userLocation }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (incidents.length > 0) {
+      const bounds = L.latLngBounds(
+        incidents
+          .filter(inc => inc.latitude && inc.longitude)
+          .map(incident => [parseFloat(incident.latitude), parseFloat(incident.longitude)])
+      );
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      }
+    } else if (userLocation) {
+      map.setView([userLocation.lat, userLocation.lng], 14);
+    }
+  }, [incidents, userLocation, map]);
+
+  return null;
+};
+
+// Formater le statut pour l'affichage
+const formatStatut = (statut) => {
+  const statutMap = {
+    'REDIGE': { label: 'Rédigé', color: '#6b7280', icon: Clock },
+    'PRISE_EN_COMPTE': { label: 'Pris en compte', color: '#6366f1', icon: Eye },
+    'VALIDE': { label: 'Validé', color: '#3b82f6', icon: CheckCircle2 },
+    'EN_COURS_DE_TRAITEMENT': { label: 'En cours', color: '#f59e0b', icon: Loader2 },
+    'TRAITE': { label: 'Traité', color: '#10b981', icon: CheckCircle2 },
+    'REJETE': { label: 'Rejeté', color: '#ef4444', icon: XCircle },
+    'BLOQUE': { label: 'Bloqué', color: '#dc2626', icon: AlertCircle }
+  };
+  return statutMap[statut] || { label: statut, color: '#6b7280', icon: Clock };
+};
+
+/**
+ * Page Ma Carte - Visualisation géographique des incidents du citoyen
+ * Affiche uniquement les incidents déclarés par le citoyen actuel
+ */
+const MaCarte = () => {
+  const { deviceId, isLoading: deviceIdLoading } = useCitizenDeviceId();
+  const [incidents, setIncidents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const markerRefs = useRef({});
+
+  // Récupérer la position de l'utilisateur
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (err) => {
+          console.log('Géolocalisation non disponible:', err.message);
+        }
+      );
+    }
+  }, []);
+
+  // Récupérer les incidents du citoyen
+  const fetchMyIncidents = async () => {
+    try {
+      setError(null);
+      const email = localStorage.getItem('citizenEmail');
+
+      let data = [];
+      if (email) {
+        console.log('📧 Récupération carte par email:', email);
+        data = await publicAPI.getIncidentsByEmail(email);
+      } else if (deviceId) {
+        console.log('🔑 Récupération carte par UUID:', deviceId);
+        data = await publicAPI.getIncidentsByDeviceId(deviceId);
+      }
+
+      // Filtrer les incidents avec coordonnées valides
+      const incidentsWithCoords = data.filter(
+        inc => inc.latitude && inc.longitude && 
+               !isNaN(parseFloat(inc.latitude)) && 
+               !isNaN(parseFloat(inc.longitude))
+      );
+
+      setIncidents(incidentsWithCoords);
+      console.log(`✅ ${incidentsWithCoords.length} incidents avec coordonnées`);
+    } catch (err) {
+      console.error('Erreur récupération incidents:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    const email = localStorage.getItem('citizenEmail');
+    if (email || deviceId) {
+      fetchMyIncidents();
+    } else if (!deviceIdLoading) {
+      setLoading(false);
+    }
+  }, [deviceId, deviceIdLoading]);
+
+  // Rafraîchir les incidents
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchMyIncidents();
+  };
+
+  // Centre par défaut (Maroc)
+  const defaultCenter = userLocation 
+    ? [userLocation.lat, userLocation.lng] 
+    : [31.7917, -7.0926];
+
+  if (loading || deviceIdLoading) {
+    return (
+      <PWAGuard>
+        <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh' }}>
+          <div style={{ textAlign: 'center' }}>
+            <Loader2 size={48} className="spin" style={{ color: 'var(--primary-color)', marginBottom: '1rem' }} />
+            <p style={{ color: 'var(--text-secondary)' }}>Chargement de votre carte...</p>
+          </div>
+        </div>
+      </PWAGuard>
+    );
+  }
+
+  return (
+    <PWAGuard>
+      <div className="page" style={{ padding: 0, height: 'calc(100vh - 140px)' }}>
+        {/* Header flottant */}
+        <div style={{
+          position: 'absolute',
+          top: '10px',
+          left: '10px',
+          right: '10px',
+          zIndex: 1000,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          pointerEvents: 'none'
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '10px 16px',
+            borderRadius: '12px',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+            pointerEvents: 'auto'
+          }}>
+            <h2 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <MapPin size={18} style={{ color: 'var(--primary-color)' }} />
+              Mes Incidents ({incidents.length})
+            </h2>
+          </div>
+          
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            style={{
+              background: 'white',
+              border: 'none',
+              padding: '10px',
+              borderRadius: '50%',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+              cursor: 'pointer',
+              pointerEvents: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <RefreshCw size={20} className={isRefreshing ? 'spin' : ''} style={{ color: 'var(--primary-color)' }} />
+          </button>
+        </div>
+
+        {/* Message si aucun incident */}
+        {incidents.length === 0 && !error && (
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 1000,
+            background: 'white',
+            padding: '2rem',
+            borderRadius: '16px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+            textAlign: 'center',
+            maxWidth: '90%'
+          }}>
+            <MapPin size={48} style={{ color: '#cbd5e1', marginBottom: '1rem' }} />
+            <h3 style={{ margin: '0 0 0.5rem', color: '#1e293b' }}>Aucun incident à afficher</h3>
+            <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
+              Vos incidents déclarés apparaîtront ici sur la carte
+            </p>
+          </div>
+        )}
+
+        {/* Message d'erreur */}
+        {error && (
+          <div style={{
+            position: 'absolute',
+            top: '70px',
+            left: '10px',
+            right: '10px',
+            zIndex: 1000,
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <AlertCircle size={20} style={{ color: '#ef4444' }} />
+            <span style={{ color: '#dc2626', fontSize: '0.9rem' }}>{error}</span>
+          </div>
+        )}
+
+        {/* Carte */}
+        <MapContainer
+          center={defaultCenter}
+          zoom={incidents.length > 0 ? 12 : 6}
+          style={{ height: '100%', width: '100%' }}
+          zoomControl={false}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+
+          <MapUpdater incidents={incidents} userLocation={userLocation} />
+
+          {/* Marqueurs des incidents */}
+          {incidents.map(incident => {
+            const lat = parseFloat(incident.latitude);
+            const lng = parseFloat(incident.longitude);
+            const statutInfo = formatStatut(incident.statut);
+            const StatutIcon = statutInfo.icon;
+
+            return (
+              <Marker
+                key={incident.id}
+                position={[lat, lng]}
+                icon={getIncidentIcon(incident.typeIncident, incident.statut)}
+                ref={(ref) => { markerRefs.current[incident.id] = ref; }}
+              >
+                <Popup>
+                  <div style={{ minWidth: '220px', padding: '4px' }}>
+                    {/* Photo si disponible */}
+                    {incident.photoUrl && (
+                      <img
+                        src={incident.photoUrl}
+                        alt="Photo incident"
+                        style={{
+                          width: '100%',
+                          height: '120px',
+                          objectFit: 'cover',
+                          borderRadius: '8px',
+                          marginBottom: '10px'
+                        }}
+                      />
+                    )}
+
+                    {/* Type d'incident */}
+                    <h3 style={{ margin: '0 0 8px', fontSize: '1rem', color: '#1e293b' }}>
+                      {incident.typeIncident}
+                    </h3>
+
+                    {/* Statut */}
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '4px 10px',
+                      borderRadius: '20px',
+                      backgroundColor: `${statutInfo.color}15`,
+                      color: statutInfo.color,
+                      fontSize: '0.8rem',
+                      fontWeight: '600',
+                      marginBottom: '10px'
+                    }}>
+                      <StatutIcon size={14} />
+                      {statutInfo.label}
+                    </div>
+
+                    {/* Description */}
+                    {incident.description && (
+                      <p style={{ 
+                        margin: '0 0 10px', 
+                        fontSize: '0.85rem', 
+                        color: '#475569',
+                        lineHeight: '1.4'
+                      }}>
+                        {incident.description.length > 100 
+                          ? incident.description.substring(0, 100) + '...' 
+                          : incident.description}
+                      </p>
+                    )}
+
+                    {/* Date */}
+                    <div style={{ 
+                      fontSize: '0.75rem', 
+                      color: '#94a3b8',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      <Clock size={12} />
+                      {new Date(incident.dateCreation).toLocaleDateString('fr-FR', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      })}
+                    </div>
+
+                    {/* Bouton navigation */}
+                    <button
+                      onClick={() => {
+                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
+                      }}
+                      style={{
+                        marginTop: '12px',
+                        width: '100%',
+                        padding: '8px',
+                        background: 'var(--primary-color)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Navigation size={14} />
+                      Y aller
+                    </button>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
+
+          {/* Marqueur position utilisateur */}
+          {userLocation && (
+            <Marker
+              position={[userLocation.lat, userLocation.lng]}
+              icon={L.divIcon({
+                html: `
+                  <div style="
+                    width: 20px;
+                    height: 20px;
+                    background: #3b82f6;
+                    border: 3px solid white;
+                    border-radius: 50%;
+                    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3);
+                  "></div>
+                `,
+                className: 'user-location-marker',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+              })}
+            >
+              <Popup>
+                <div style={{ textAlign: 'center', padding: '4px' }}>
+                  <strong>📍 Votre position</strong>
+                </div>
+              </Popup>
+            </Marker>
+          )}
+        </MapContainer>
+
+        {/* Légende flottante */}
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          left: '10px',
+          background: 'white',
+          padding: '10px 14px',
+          borderRadius: '10px',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+          zIndex: 1000,
+          fontSize: '0.75rem'
+        }}>
+          <div style={{ fontWeight: '600', marginBottom: '6px', color: '#1e293b' }}>Légende</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#6b7280' }}></span>
+              <span style={{ color: '#64748b' }}>Rédigé</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b' }}></span>
+              <span style={{ color: '#64748b' }}>En cours</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981' }}></span>
+              <span style={{ color: '#64748b' }}>Traité</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </PWAGuard>
+  );
+};
+
+export default MaCarte;
