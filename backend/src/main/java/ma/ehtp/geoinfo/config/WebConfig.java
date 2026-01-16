@@ -16,7 +16,11 @@ public class WebConfig implements WebMvcConfigurer {
                 .allowedOrigins(
                         "http://localhost:5173", // Vite dev server
                         "http://localhost:5174", // Vite dev server alternatif
-                        "http://localhost:3000" // React dev server
+                        "http://localhost:3000", // React dev server
+                        "https://*.netlify.app", // Netlify deployments
+                        "https://*.ngrok-free.app", // Ngrok tunnel
+                        "https://*.ngrok.app", // Ngrok tunnel (nouveau format)
+                        "https://*.ngrok.io" // Ngrok tunnel (ancien format)
                 )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                 .allowedHeaders("*")

@@ -70,27 +70,31 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList(
-                // HTTP - Développement PC
-                "http://localhost:5173",
-                "http://localhost:5174",
-                "http://localhost:3000",
-                "http://127.0.0.1:5173",
-                "http://127.0.0.1:5174",
-                // HTTP - Network IPs for mobile access
-                "http://192.168.11.113:5173",
-                "http://10.5.0.2:5173",
-                // HTTPS - Development with SSL certificates (PWA)
-                "https://localhost:5173",
-                "https://localhost:5174",
-                "https://127.0.0.1:5173",
-                "https://192.168.11.113:5173",
-                "https://10.5.0.2:5173",
-                // ngrok HTTPS tunnel
-                "https://scenic-freddy.ngrok-free.dev"));
+
+        // Use allowedOriginPatterns instead of allowedOrigins to support wildcards
+        configuration.setAllowedOriginPatterns(Arrays.asList(
+                // Local development
+                "http://localhost:*",
+                "https://localhost:*",
+                "http://127.0.0.1:*",
+                "https://127.0.0.1:*",
+
+                // Network IPs (for mobile testing on local network)
+                "http://192.168.*.*:*",
+                "https://192.168.*.*:*",
+                "http://10.*.*.*:*",
+                "https://10.*.*.*:*",
+
+                // Production / Deployments
+                "https://*.netlify.app", // Any Netlify deployment
+                "https://*.ngrok-free.app", // Any Ngrok free app URL
+                "https://*.ngrok-free.dev", // Any Ngrok free dev URL
+                "https://*.ngrok.io" // Legacy Ngrok domains
+        ));
+
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
-        configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
+        configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type", "Content-Disposition"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 
@@ -118,6 +122,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Endpoints publics
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/health").permitAll() // Health check
+                        .requestMatchers("/api/test").permitAll() // Test endpoint
                         .requestMatchers("/api/debug/**").permitAll() // Debug endpoints
                         .requestMatchers("/api/incidents").permitAll()
                         .requestMatchers("/api/incidents/by-email/**").permitAll() // Email recovery

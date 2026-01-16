@@ -76,6 +76,7 @@ class ApiClient {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'ngrok-skip-browser-warning': 'true', // Skip ngrok warning page
         },
         withCredentials: true
       });
@@ -142,6 +143,7 @@ class ApiClient {
     const defaultHeaders = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'ngrok-skip-browser-warning': 'true', // Skip ngrok warning page
     };
 
     if (token) {
