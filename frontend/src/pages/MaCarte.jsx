@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import { MapPin, RefreshCw, AlertCircle, Eye, Navigation, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { MapPin, RefreshCw, AlertCircle, Eye, Navigation, Clock, CheckCircle2, XCircle, Loader2, Layers, Target, ChevronDown, ChevronUp } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useCitizenDeviceId } from '../hooks/useCitizenDeviceId';
@@ -128,7 +128,12 @@ const MaCarte = () => {
   const [error, setError] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
+  const [selectedBaseLayer, setSelectedBaseLayer] = useState('streets');
+  const [showLayerSelector, setShowLayerSelector] = useState(false);
+  const [legendExpanded, setLegendExpanded] = useState(false);
+  const [selectedIncident, setSelectedIncident] = useState(null);
   const markerRefs = useRef({});
+  const mapRef = useRef(null);
 
   // Récupérer la position de l'utilisateur
   useEffect(() => {
@@ -200,6 +205,55 @@ const MaCarte = () => {
     ? [userLocation.lat, userLocation.lng] 
     : [31.7917, -7.0926];
 
+  // Options de fond de carte
+  const baseLayers = {
+    streets: {
+      name: 'Plan',
+      url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      attribution: '© OpenStreetMap'
+    },
+    satellite: {
+      name: 'Satellite',
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      attribution: '© Esri'
+    },
+    terrain: {
+      name: 'Terrain',
+      url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+      attribution: '© OpenTopoMap'
+    }
+  };
+
+  // Centrer sur la position de l'utilisateur
+  const centerOnUser = () => {
+    if (userLocation && mapRef.current) {
+      mapRef.current.setView([userLocation.lat, userLocation.lng], 16, { animate: true });
+    }
+  };
+
+  // Centrer sur un incident spécifique
+  const focusOnIncident = (incident) => {
+    if (mapRef.current) {
+      const lat = parseFloat(incident.latitude);
+      const lng = parseFloat(incident.longitude);
+      mapRef.current.setView([lat, lng], 17, { animate: true });
+      setSelectedIncident(incident.id);
+      setTimeout(() => {
+        if (markerRefs.current[incident.id]) {
+          markerRefs.current[incident.id].openPopup();
+        }
+      }, 500);
+    }
+  };
+
+  // Statistiques des incidents
+  const stats = {
+    total: incidents.length,
+    enCours: incidents.filter(i => ['REDIGE', 'PRISE_EN_COMPTE', 'VALIDE', 'EN_COURS_DE_TRAITEMENT'].includes(i.statut)).length,
+    traites: incidents.filter(i => i.statut === 'TRAITE').length,
+    rejetes: incidents.filter(i => ['REJETE', 'BLOQUE'].includes(i.statut)).length
+  };
+
   if (loading || deviceIdLoading) {
     return (
       <PWAGuard>
@@ -215,50 +269,146 @@ const MaCarte = () => {
 
   return (
     <PWAGuard>
-      <div className="page" style={{ padding: 0, height: 'calc(100vh - 140px)' }}>
-        {/* Header flottant */}
+      <div className="page" style={{ padding: 0, height: 'calc(100vh - 140px)', position: 'relative' }}>
+        
+        {/* Header professionnel avec stats */}
         <div style={{
           position: 'absolute',
-          top: '10px',
-          left: '10px',
-          right: '10px',
+          top: 0,
+          left: 0,
+          right: 0,
           zIndex: 1000,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          pointerEvents: 'none'
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(255,255,255,0.9) 100%)',
+          backdropFilter: 'blur(10px)',
+          borderBottom: '1px solid rgba(0,0,0,0.08)',
+          padding: '12px 16px',
+          boxShadow: '0 2px 20px rgba(0,0,0,0.08)'
         }}>
-          <div style={{
-            background: 'white',
-            padding: '10px 16px',
-            borderRadius: '12px',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
-            pointerEvents: 'auto'
-          }}>
-            <h2 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <MapPin size={18} style={{ color: 'var(--primary-color)' }} />
-              Mes Incidents ({incidents.length})
-            </h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h1 style={{ 
+                margin: 0, 
+                fontSize: '1.25rem', 
+                fontWeight: '700',
+                color: '#0f172a',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <MapPin size={20} color="white" />
+                </div>
+                Ma Carte
+              </h1>
+              <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                {incidents.length === 0 ? 'Aucun incident' : `${incidents.length} incident${incidents.length > 1 ? 's' : ''} déclaré${incidents.length > 1 ? 's' : ''}`}
+              </p>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {/* Bouton centrer sur moi */}
+              {userLocation && (
+                <button
+                  onClick={centerOnUser}
+                  style={{
+                    background: 'white',
+                    border: '1px solid #e2e8f0',
+                    padding: '10px',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s'
+                  }}
+                  title="Ma position"
+                >
+                  <Target size={18} style={{ color: '#3b82f6' }} />
+                </button>
+              )}
+              
+              {/* Bouton rafraîchir */}
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                style={{
+                  background: isRefreshing ? '#f1f5f9' : 'white',
+                  border: '1px solid #e2e8f0',
+                  padding: '10px',
+                  borderRadius: '10px',
+                  cursor: isRefreshing ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <RefreshCw size={18} className={isRefreshing ? 'spin' : ''} style={{ color: '#64748b' }} />
+              </button>
+            </div>
           </div>
-          
-          <button
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            style={{
-              background: 'white',
-              border: 'none',
-              padding: '10px',
-              borderRadius: '50%',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
-              cursor: 'pointer',
-              pointerEvents: 'auto',
+
+          {/* Mini stats */}
+          {incidents.length > 0 && (
+            <div style={{
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <RefreshCw size={20} className={isRefreshing ? 'spin' : ''} style={{ color: 'var(--primary-color)' }} />
-          </button>
+              gap: '8px',
+              marginTop: '12px',
+              overflowX: 'auto',
+              paddingBottom: '4px'
+            }}>
+              <div style={{
+                flex: '0 0 auto',
+                padding: '8px 14px',
+                borderRadius: '20px',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                color: 'white',
+                fontSize: '0.75rem',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span style={{ fontSize: '1rem' }}>{stats.total}</span> Total
+              </div>
+              <div style={{
+                flex: '0 0 auto',
+                padding: '8px 14px',
+                borderRadius: '20px',
+                background: '#fef3c7',
+                color: '#92400e',
+                fontSize: '0.75rem',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span style={{ fontSize: '1rem' }}>{stats.enCours}</span> En cours
+              </div>
+              <div style={{
+                flex: '0 0 auto',
+                padding: '8px 14px',
+                borderRadius: '20px',
+                background: '#d1fae5',
+                color: '#065f46',
+                fontSize: '0.75rem',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span style={{ fontSize: '1rem' }}>{stats.traites}</span> Traités
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Message si aucun incident */}
@@ -270,17 +420,50 @@ const MaCarte = () => {
             transform: 'translate(-50%, -50%)',
             zIndex: 1000,
             background: 'white',
-            padding: '2rem',
-            borderRadius: '16px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+            padding: '2.5rem',
+            borderRadius: '20px',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.12)',
             textAlign: 'center',
-            maxWidth: '90%'
+            maxWidth: '85%',
+            border: '1px solid #f1f5f9'
           }}>
-            <MapPin size={48} style={{ color: '#cbd5e1', marginBottom: '1rem' }} />
-            <h3 style={{ margin: '0 0 0.5rem', color: '#1e293b' }}>Aucun incident à afficher</h3>
-            <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
-              Vos incidents déclarés apparaîtront ici sur la carte
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 1.5rem'
+            }}>
+              <MapPin size={36} style={{ color: '#94a3b8' }} />
+            </div>
+            <h3 style={{ margin: '0 0 0.75rem', color: '#1e293b', fontSize: '1.2rem', fontWeight: '700' }}>
+              Aucun incident déclaré
+            </h3>
+            <p style={{ margin: '0 0 1.5rem', color: '#64748b', fontSize: '0.9rem', lineHeight: '1.5' }}>
+              Vos signalements apparaîtront ici sur la carte avec leur statut en temps réel
             </p>
+            <a
+              href="/declarer-incident"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 24px',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                color: 'white',
+                borderRadius: '12px',
+                textDecoration: 'none',
+                fontWeight: '600',
+                fontSize: '0.9rem',
+                boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+              }}
+            >
+              <MapPin size={18} />
+              Signaler un incident
+            </a>
           </div>
         )}
 
@@ -288,20 +471,21 @@ const MaCarte = () => {
         {error && (
           <div style={{
             position: 'absolute',
-            top: '70px',
-            left: '10px',
-            right: '10px',
+            top: '120px',
+            left: '16px',
+            right: '16px',
             zIndex: 1000,
-            background: '#fef2f2',
+            background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
             border: '1px solid #fecaca',
-            padding: '12px 16px',
-            borderRadius: '8px',
+            padding: '14px 18px',
+            borderRadius: '12px',
             display: 'flex',
             alignItems: 'center',
-            gap: '10px'
+            gap: '12px',
+            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.15)'
           }}>
-            <AlertCircle size={20} style={{ color: '#ef4444' }} />
-            <span style={{ color: '#dc2626', fontSize: '0.9rem' }}>{error}</span>
+            <AlertCircle size={22} style={{ color: '#ef4444', flexShrink: 0 }} />
+            <span style={{ color: '#dc2626', fontSize: '0.9rem', fontWeight: '500' }}>{error}</span>
           </div>
         )}
 
@@ -309,12 +493,14 @@ const MaCarte = () => {
         <MapContainer
           center={defaultCenter}
           zoom={incidents.length > 0 ? 12 : 6}
-          style={{ height: '100%', width: '100%' }}
+          style={{ height: '100%', width: '100%', paddingTop: incidents.length > 0 ? '130px' : '90px' }}
           zoomControl={false}
+          ref={mapRef}
+          whenReady={(e) => { mapRef.current = e.target; }}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution={baseLayers[selectedBaseLayer].attribution}
+            url={baseLayers[selectedBaseLayer].url}
           />
 
           <MapUpdater incidents={incidents} userLocation={userLocation} />
@@ -462,34 +648,231 @@ const MaCarte = () => {
           )}
         </MapContainer>
 
-        {/* Légende flottante */}
+        {/* Sélecteur de fond de carte */}
+        <div style={{
+          position: 'absolute',
+          top: incidents.length > 0 ? '145px' : '105px',
+          right: '16px',
+          zIndex: 1000
+        }}>
+          <button
+            onClick={() => setShowLayerSelector(!showLayerSelector)}
+            style={{
+              background: 'white',
+              border: '1px solid #e2e8f0',
+              padding: '10px',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+              transition: 'all 0.2s'
+            }}
+          >
+            <Layers size={18} style={{ color: '#64748b' }} />
+          </button>
+          
+          {showLayerSelector && (
+            <div style={{
+              position: 'absolute',
+              top: '48px',
+              right: 0,
+              background: 'white',
+              borderRadius: '12px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+              padding: '8px',
+              minWidth: '140px',
+              border: '1px solid #e2e8f0'
+            }}>
+              {Object.entries(baseLayers).map(([key, layer]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setSelectedBaseLayer(key);
+                    setShowLayerSelector(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    border: 'none',
+                    background: selectedBaseLayer === key ? '#eff6ff' : 'transparent',
+                    color: selectedBaseLayer === key ? '#1d4ed8' : '#475569',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: selectedBaseLayer === key ? '600' : '500',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {selectedBaseLayer === key && (
+                    <CheckCircle2 size={14} />
+                  )}
+                  {layer.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Légende professionnelle */}
         <div style={{
           position: 'absolute',
           bottom: '20px',
-          left: '10px',
+          left: '16px',
           background: 'white',
-          padding: '10px 14px',
-          borderRadius: '10px',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+          borderRadius: '14px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
           zIndex: 1000,
-          fontSize: '0.75rem'
+          overflow: 'hidden',
+          border: '1px solid #f1f5f9',
+          maxWidth: legendExpanded ? '200px' : '120px',
+          transition: 'all 0.3s ease'
         }}>
-          <div style={{ fontWeight: '600', marginBottom: '6px', color: '#1e293b' }}>Légende</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#6b7280' }}></span>
-              <span style={{ color: '#64748b' }}>Rédigé</span>
+          <button
+            onClick={() => setLegendExpanded(!legendExpanded)}
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '8px'
+            }}
+          >
+            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#334155' }}>Légende</span>
+            {legendExpanded ? <ChevronDown size={14} color="#64748b" /> : <ChevronUp size={14} color="#64748b" />}
+          </button>
+          
+          {legendExpanded && (
+            <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ 
+                  width: '12px', 
+                  height: '12px', 
+                  borderRadius: '50%', 
+                  background: '#6b7280',
+                  boxShadow: '0 2px 4px rgba(107, 114, 128, 0.3)'
+                }}></span>
+                <span style={{ color: '#475569', fontSize: '0.8rem', fontWeight: '500' }}>Rédigé</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ 
+                  width: '12px', 
+                  height: '12px', 
+                  borderRadius: '50%', 
+                  background: '#6366f1',
+                  boxShadow: '0 2px 4px rgba(99, 102, 241, 0.3)'
+                }}></span>
+                <span style={{ color: '#475569', fontSize: '0.8rem', fontWeight: '500' }}>Pris en compte</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ 
+                  width: '12px', 
+                  height: '12px', 
+                  borderRadius: '50%', 
+                  background: '#f59e0b',
+                  boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)'
+                }}></span>
+                <span style={{ color: '#475569', fontSize: '0.8rem', fontWeight: '500' }}>En cours</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ 
+                  width: '12px', 
+                  height: '12px', 
+                  borderRadius: '50%', 
+                  background: '#10b981',
+                  boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)'
+                }}></span>
+                <span style={{ color: '#475569', fontSize: '0.8rem', fontWeight: '500' }}>Traité</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ 
+                  width: '12px', 
+                  height: '12px', 
+                  borderRadius: '50%', 
+                  background: '#ef4444',
+                  boxShadow: '0 2px 4px rgba(239, 68, 68, 0.3)'
+                }}></span>
+                <span style={{ color: '#475569', fontSize: '0.8rem', fontWeight: '500' }}>Rejeté</span>
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b' }}></span>
-              <span style={{ color: '#64748b' }}>En cours</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981' }}></span>
-              <span style={{ color: '#64748b' }}>Traité</span>
-            </div>
-          </div>
+          )}
         </div>
+
+        {/* Liste des incidents (carrousel en bas) */}
+        {incidents.length > 0 && (
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            left: legendExpanded ? '220px' : '150px',
+            right: '16px',
+            zIndex: 1000,
+            overflowX: 'auto',
+            display: 'flex',
+            gap: '10px',
+            paddingBottom: '4px',
+            transition: 'left 0.3s ease'
+          }}>
+            {incidents.map(incident => {
+              const statutInfo = formatStatut(incident.statut);
+              return (
+                <button
+                  key={incident.id}
+                  onClick={() => focusOnIncident(incident)}
+                  style={{
+                    flex: '0 0 auto',
+                    background: selectedIncident === incident.id ? 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)' : 'white',
+                    border: selectedIncident === incident.id ? 'none' : '1px solid #e2e8f0',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    minWidth: '140px',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <span style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    background: statutInfo.color,
+                    flexShrink: 0
+                  }}></span>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ 
+                      fontSize: '0.8rem', 
+                      fontWeight: '600', 
+                      color: selectedIncident === incident.id ? 'white' : '#1e293b',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: '100px'
+                    }}>
+                      {incident.typeIncident}
+                    </div>
+                    <div style={{ 
+                      fontSize: '0.7rem', 
+                      color: selectedIncident === incident.id ? 'rgba(255,255,255,0.8)' : '#94a3b8' 
+                    }}>
+                      {statutInfo.label}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </PWAGuard>
   );

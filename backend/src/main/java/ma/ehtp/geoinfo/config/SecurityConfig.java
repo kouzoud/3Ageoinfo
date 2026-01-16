@@ -137,7 +137,7 @@ public class SecurityConfig {
                         .requestMatchers("/uploads/**").permitAll()
 
                         // 📱 Endpoints publics PWA pour citoyens anonymes
-                        .requestMatchers("/api/public/incidents/**").permitAll()
+                        .requestMatchers("/api/public/**").permitAll()
 
                         // Swagger/OpenAPI
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
